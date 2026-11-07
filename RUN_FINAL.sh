@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# ONE-COMMAND FINAL SUBMISSION (v7b code, LIVE 93.59, frozen copy in FINAL_CODE_v7b/). Works without Claude.
+# ONE-COMMAND FINAL SUBMISSION (v7c code, LIVE 93.61, frozen copy in FINAL_CODE_v7c/). Works without Claude.
 #
 #   1. Download the FINAL archive from the hackathon site (Datos page) into:
 #        ~/Downloads/hackathons/claude-talky-accounting/data/
 #   2. Run:   bash ~/Downloads/hackathons/claude-talky-accounting/RUN_FINAL.sh <path-to-final-archive.tar.gz or extracted folder>
-#   3. Upload the file it prints at the end (out/sub_final_v7b.csv.gz) ONCE on the Enviar page (FINAL).
+#   3. Upload the file it prints at the end (out/sub_final_v7c.csv.gz) ONCE on the Enviar page (FINAL).
 #
 # Takes ~20-25 min. Close other heavy apps first. Never run two copies at once.
 # Also works for a dry run on LIVE:   bash RUN_FINAL.sh --live
@@ -49,15 +49,15 @@ echo "== 3/6 v3 backbone (team code)  ($(date +%H:%M))"
 tail -1 out/run_${PHASE}_v3.log
 
 echo "== 4/6 remittance advices + PDF clauses  ($(date +%H:%M))"
-for ph in train live $PHASE; do (cd FINAL_CODE_v7b && $PY src/docs_extract.py --phase $ph) >> out/run_${PHASE}_docs.log 2>&1; done
+for ph in train live $PHASE; do (cd FINAL_CODE_v7c && $PY src/docs_extract.py --phase $ph) >> out/run_${PHASE}_docs.log 2>&1; done
 
-echo "== 5/6 v7b pipeline  ($(date +%H:%M))"
-(cd FINAL_CODE_v7b && V3_SUB=../out/sub_${PHASE}_v3.csv.gz $PY src/pipeline.py --phase $PHASE --passes $PASSES \
-  --out ../out/sub_${PHASE}_v7b.csv.gz --sources ../out/${PHASE}_v7b_src.csv) > out/run_${PHASE}_v7b.log 2>&1 \
-  || { echo "PIPELINE FAILED - see out/run_${PHASE}_v7b.log. FALLBACK: upload out/sub_${PHASE}_v3.csv.gz (validate it first)"; exit 1; }
-grep -E "pass |wrote" out/run_${PHASE}_v7b.log
+echo "== 5/6 v7c pipeline  ($(date +%H:%M))"
+(cd FINAL_CODE_v7c && V3_SUB=../out/sub_${PHASE}_v3.csv.gz $PY src/pipeline.py --phase $PHASE --passes $PASSES \
+  --out ../out/sub_${PHASE}_v7c.csv.gz --sources ../out/${PHASE}_v7c_src.csv) > out/run_${PHASE}_v7c.log 2>&1 \
+  || { echo "PIPELINE FAILED - see out/run_${PHASE}_v7c.log. FALLBACK: upload out/sub_${PHASE}_v3.csv.gz (validate it first)"; exit 1; }
+grep -E "pass |wrote" out/run_${PHASE}_v7c.log
 
 echo "== 6/6 validate  ($(date +%H:%M))"
-(cd FINAL_CODE_v7b && $PY src/validate_submission.py ../out/sub_${PHASE}_v7b.csv.gz --phase $PHASE)
+(cd FINAL_CODE_v7c && $PY src/validate_submission.py ../out/sub_${PHASE}_v7c.csv.gz --phase $PHASE)
 echo
-echo ">>> UPLOAD THIS FILE: $P/out/sub_${PHASE}_v7b.csv.gz   (only if it says VALID above)"
+echo ">>> UPLOAD THIS FILE: $P/out/sub_${PHASE}_v7c.csv.gz   (only if it says VALID above)"

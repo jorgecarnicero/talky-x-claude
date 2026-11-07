@@ -10,3 +10,10 @@
   ar_same_amount_fifo 3.3 %, bank fees 3.2+1.6 %, ar_1toN_text 3.1 %, ar_short_discount 2.9 % …
 - AP payments carry `end_to_end_id` = payment-run id (camt) -> exact lookup in payment_runs/.
 - train-lite contains ~214k 2021 items never settled and absent from LIVE's open items: dropped in simulation.
+| 11:45 | nonitem pass alone | 3.00 (14,172 lines claimed, >=99.8% exact) | – | – |
+| 12:05 | remittance pass alone (+ PDF/advice extraction) | 30.40 (6,764 lines, pair precision 0.9998) | – | – |
+
+- Judgment call (remittance): Sep-2025 XLSX layout has no reason column; an unexplained deduction is SHORT_DISPUTE only if
+  it is an exact standard cut (3/5/10/20/30 %), else PARTIAL. Unverifiable on labels — revisit if LIVE looks off.
+- PDF clause extraction: 100 % parsed train/live, <1 min per phase; clauses present on ~100 % of instalment/retention/
+  advance/replaced items (pdfinfo.py API for the AR matcher).

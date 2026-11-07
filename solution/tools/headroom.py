@@ -10,25 +10,23 @@ class) replaced by the golden, and re-scored with the OFFICIAL scorer (starter/b
 The tool also checks that (a) the unmodified submission reproduces result.json's score and (b) replacing every segment gives 100.
 """
 import argparse
-import bisect
 import csv
 import gzip
 import json
 import os
-import re
 import sys
 from collections import Counter, defaultdict
 
-import pandas as pd
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import dev  # noqa: E402  (scorer import, EXC, read_sub, txn_ok)
+import hr_lib  # noqa: E402
 
-S = dev.S
+dev, S = hr_lib.dev, hr_lib.S
 REQUIRED = S.REQUIRED
 ERR_TYPES = [("a", "pares equivocados"), ("b", "pares bien, excepción mal"), ("c", "pares bien, importe mal"),
              ("d", "categoría/excepción mal (sin partida)"), ("e", "filas de más o de menos")]
+ERR_NAME = dict(ERR_TYPES)
 TARGET_F1 = 0.9
+EASE = {"baja": 1.0, "media": 0.5, "alta": 0.25}
 
 
 # ------------------------------------------------------------------ rows / rescoring
@@ -43,7 +41,6 @@ def read_raw(path):
 
 
 def golden_rows(g):
-    """golden record of a txn in the same shape as read_raw"""
     items, cat, exc, _ = g
     if items:
         return {i: (f"{a:.2f}", "", e) for i, (a, e) in items.items()}
@@ -76,7 +73,6 @@ def fix_class_rows(base, golden, cls):
     """Correct only the rows of exception class `cls`: drop the submitted rows of that class, add the golden rows of that class.
     If that would mix item rows with a no-item row on the same line, the whole line is taken from the golden instead."""
     rows = dict(base)
-    touched = 0
     for t, g in golden.txns.items():
         gr = golden_rows(g)
         gc = {i: v for i, v in gr.items() if v[2] == cls}
@@ -86,11 +82,10 @@ def fix_class_rows(base, golden, cls):
             continue
         new = {i: v for i, v in cur.items() if i not in cc}
         new.update(gc)
-        if ("" in new and len(new) > 1):
+        if "" in new and len(new) > 1:
             new = gr
         rows[t] = new
-        touched += 1
-    return rows, touched
+    return rows
 
 
 # ------------------------------------------------------------------ error taxonomy
@@ -108,186 +103,121 @@ def error_type(g, p):
     return "c"
 
 
-# ------------------------------------------------------------------ recall vs ambiguity (same method as bolsa.py)
-def nrm(s):
-    return re.sub(r"[^A-Z0-9]", "", str(s).upper())
+# ------------------------------------------------------------------ recoverability (payer = the pipeline's, not the golden's)
+def recoverability(run, rp, pid, t):
+    """-> (class, payer_how, payer_right) with class in recall | ambiguity | impossible | sin partida
+
+    impossible : a golden item was not open at that moment (duplicate, already consumed / returned, not in the ledger);
+    recall     : otherwise, a golden document number is visible in the text, or the open items of the payer the PIPELINE
+                 identifies include all golden items and at most 5 of them are in range (open <= payment x1.01);
+    ambiguity  : otherwise (no reference, more than 5 candidates, or the pipeline's payer is missing / not the golden's party)."""
+    gi = run.golden.txns[t][0]
+    if not gi:
+        return "sin partida", None, None
+    party, how = pid.identify(t)
+    gparties = {rp.party_of(i) for i in gi}
+    right = party is not None and party in gparties
+    if any(i not in rp.items.index or rp.open_at(i, t) <= 0.005 for i in gi):
+        return "impossible", how, right
+    if rp.refs_visible(t, list(gi)) > 0:
+        return "recall", how, right
+    if right:
+        cands = rp.candidates(party, t)
+        ids = {c[0] for c in cands}
+        if all(i in ids for i in gi) and sum(1 for c in cands if c[2]) <= 5:
+            return "recall", how, right
+    return "ambiguity", how, right
 
 
-class Replay:
-    def __init__(self, D, golden, bank):
-        self.golden, self.bank = golden, bank
-        op = pd.read_csv(os.path.join(D, "live", "open_items_at_start.csv.gz"), dtype=str, keep_default_na=False)
-        cols = ["item_id", "party_id", "document_number", "issue_date", "currency", "total_amount", "open_amount"]
-        newi = []
-        for fn, pc, dc in (("ar_invoices.csv.gz", "customer_id", "document_number"),
-                           ("ap_invoices.csv.gz", "supplier_id", "supplier_invoice_number"),
-                           ("credit_notes.csv.gz", "party_id", "document_number")):
-            d = pd.read_csv(os.path.join(D, "live", fn), dtype=str, keep_default_na=False)
-            newi.append(pd.DataFrame({"item_id": d.item_id, "party_id": d[pc], "document_number": d[dc], "issue_date": d.issue_date,
-                                      "currency": d.currency, "total_amount": d.total_amount, "open_amount": d.total_amount}))
-        items = pd.concat([op[cols]] + newi, ignore_index=True).drop_duplicates("item_id").set_index("item_id")
-        items["open0"] = items.open_amount.astype(float)
-        self.items = items
-        self.by_party = defaultdict(list)
-        for iid, pid in zip(items.index, items.party_id):
-            self.by_party[pid].append(iid)
-        bdate = bank.booking_date.to_dict()
-        self.bdate = bdate
-        ev = defaultdict(list)
-        for t, g in golden.txns.items():
-            for iid, (amt, exc) in g[0].items():
-                delta = amt if exc == "RETURNED" else (0.0 if exc == "DUPLICATE_PAYMENT" else -amt)
-                ev[iid].append((bdate[t], t, delta))
-        for iid in ev:
-            ev[iid].sort()
-        self.ev = ev
-        self.evkeys = {iid: [(d, t) for d, t, _ in v] for iid, v in ev.items()}
-
-    def open_at(self, iid, t):
-        o = self.items.at[iid, "open0"]
-        k = bisect.bisect_left(self.evkeys.get(iid, []), (self.bdate[t], t))
-        return o + sum(x[2] for x in self.ev.get(iid, [])[:k])
-
-    def classify(self, t):
-        """'recall' | 'ambiguity' | 'not findable'"""
-        gi = self.golden.txns[t][0]
-        ok_items = [iid for iid in gi if iid in self.items.index]
-        if not ok_items:
-            return "not findable"
-        party = Counter(self.items.at[iid, "party_id"] for iid in ok_items).most_common(1)[0][0]
-        same_cur = self.bank.at[t, "currency"] == self.items.at[ok_items[0], "currency"]
-        amt = abs(float(self.bank.at[t, "amount"]))
-        cand, rng = set(), 0
-        for iid in self.by_party[party]:
-            if self.items.at[iid, "issue_date"] > self.bdate[t]:
-                continue
-            o = self.open_at(iid, t)
-            if o > 0.005:
-                cand.add(iid)
-                if (not same_cur) or o <= amt * 1.01:
-                    rng += 1
-        if sum(1 for iid in gi if iid in cand) < len(gi):
-            return "not findable"
-        text = nrm(" ".join(str(self.bank.at[t, c]) for c in ("text", "ref1", "ref2", "remittance_info", "end_to_end_id")
-                            if c in self.bank.columns))
-        digits = re.sub(r"\D", "", text)
-        refs = 0
-        for iid in gi:
-            dn = nrm(self.items.at[iid, "document_number"])
-            dg = re.sub(r"\D", "", dn)
-            if (len(dn) >= 5 and dn in text) or (len(dg) >= 5 and dg[-6:] in digits):
-                refs += 1
-        return "recall" if (refs > 0 or rng <= 5) else "ambiguity"
+def difficulty(tax, kinds):
+    n = sum(tax.values())
+    rec = kinds.get("recall", 0) / n
+    amb = (kinds.get("ambiguity", 0) + kinds.get("impossible", 0)) / n
+    rule = (tax.get("b", 0) + tax.get("c", 0) + tax.get("d", 0)) / n
+    if rule >= 0.5 or rec >= 0.6:
+        return "baja"
+    if amb >= 0.6:
+        return "alta"
+    return "media"
 
 
-# ------------------------------------------------------------------ markdown helpers
-def md_table(headers, rows, align=None):
-    align = align or ["l"] + ["r"] * (len(headers) - 1)
-    L = ["| " + " | ".join(headers) + " |", "|" + "|".join("---:" if a == "r" else "---" for a in align) + "|"]
-    for r in rows:
-        L.append("| " + " | ".join(str(c) for c in r) + " |")
-    return L
-
-
-def pts(x):
-    return f"{x:.2f}"
-
-
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("run")
-    ap.add_argument("--data", default=None, help="dev dataset dir (default: the one recorded in result.json)")
-    ap.add_argument("--top", type=int, default=10, help="segments in the detailed sections (default 10)")
-    ap.add_argument("--out", default=None, help="output file (default notes/headroom_<run>.md)")
-    a = ap.parse_args()
-
-    run_dir = os.path.join(dev.ROOT, "dev_runs", a.run)
-    res_json = json.load(open(os.path.join(run_dir, "result.json")))
-    D = os.path.expanduser(a.data or res_json["meta"]["dataset"])
-    base_score = res_json["score"]
-    bt = os.path.join(D, "live", "bank_transactions.csv.gz")
-    cats = [r["category"] for r in csv.DictReader(open(os.path.join(D, "masters", "categories.csv"), encoding="utf-8"))]
-    golden = S.load_golden(os.path.join(D, "golden_dev.csv"), bt, dev.EXC, cats)
-    sub_path = os.path.join(run_dir, "sub.csv.gz")
-    base = read_raw(sub_path)
-    pred = dev.read_sub(sub_path)
-    why = {}
-    wp = os.path.join(run_dir, "why.csv")
-    if os.path.exists(wp):
-        with open(wp, newline="", encoding="utf-8") as fh:
-            why = {r["bank_txn_id"]: r["why"] for r in csv.DictReader(fh)}
-    bank = pd.read_csv(bt, dtype=str, keep_default_na=False).set_index("bank_txn_id")
-
-    # ---- self-checks
+# ------------------------------------------------------------------ the computation
+def compute(run_name, data=None, top=10, light=False, log=print):
+    """Everything the report needs, as a JSON-serialisable dict. light=True: segment points only (no classes, no detail)."""
+    run = hr_lib.Run(run_name, data)
+    golden, pred, why = run.golden, run.pred, run.why
+    base = read_raw(os.path.join(run.dir, "sub.csv.gz"))
+    base_score = run.res["score"]
     score0 = rescore(golden, base)
     assert abs(score0 - base_score) < 0.006, f"rebuilt submission scores {score0}, result.json says {base_score}"
+    N = len(golden.txns)
+    wrong = {t for t in golden.txns if not run.ok(t)}
     seg_txns = defaultdict(list)
     for t, g in golden.txns.items():
         seg_txns[g[3]].append(t)
-    wrong = {t for t, g in golden.txns.items() if not dev.txn_ok(g, pred.get(t))}
-    oracle = rescore(golden, fix_txns(base, golden, golden.txns))
-    assert abs(oracle - 100) < 1e-9, f"oracle scores {oracle}"
-    N = len(golden.txns)
-    gap = 100 - score0
+    oracle = None
+    if not light:
+        oracle = rescore(golden, fix_txns(base, golden, golden.txns))
+        assert abs(oracle - 100) < 1e-9, f"oracle scores {oracle}"
+    etype = {t: error_type(golden.txns[t], pred.get(t)) for t in wrong}
 
-    # ---- 1. segments
-    seg_rows = []
+    segs = []
     for seg, ts in seg_txns.items():
         w = [t for t in ts if t in wrong]
-        p = rescore(golden, fix_txns(base, golden, w)) - score0 if w else 0.0
-        seg_rows.append({"seg": seg, "n": len(ts), "wrong": len(w), "acc": 1 - len(w) / len(ts), "pts": p, "wrong_txns": w})
-    seg_rows.sort(key=lambda r: (-r["pts"], -r["wrong"]))
-    total_seg = sum(r["pts"] for r in seg_rows)
+        pts = rescore(golden, fix_txns(base, golden, w)) - score0 if w else 0.0
+        tax = Counter(etype[t] for t in w)
+        segs.append({"segment": seg, "n": len(ts), "wrong": len(w), "accuracy": 1 - len(w) / len(ts), "points": pts,
+                     "tax": {k: tax.get(k, 0) for k in "abcde"}})
+    segs.sort(key=lambda r: (-r["points"], -r["wrong"]))
 
-    # ---- 2. classes
-    cls_csv = {r["class"]: r for r in csv.DictReader(open(os.path.join(run_dir, "classes.csv"), encoding="utf-8"))}
+    out = {"run": run.name, "score": score0, "gap": 100 - score0, "window": run.res["meta"].get("window"), "dataset": run.D,
+           "txns": N, "wrong": len(wrong), "oracle": oracle, "light": light, "segments": segs,
+           "sum_segment_points": sum(s["points"] for s in segs)}
+    if light:
+        return out
+
+    # ---- classes
+    cls_csv = {r["class"]: r for r in csv.DictReader(open(os.path.join(run.dir, "classes.csv"), encoding="utf-8"))}
     k_cls = sum(1 for r in cls_csv.values() if int(r["golden_rows"]) > 0)
-    cls_rows = []
+    classes = []
     for c in dev.EXC:
         r = cls_csv[c]
         f1, sup = float(r["f1"]), int(r["golden_rows"])
-        rows_c, touched = fix_class_rows(base, golden, c)
-        p_rows = rescore(golden, rows_c) - score0
+        p_rows = rescore(golden, fix_class_rows(base, golden, c)) - score0
         tl = [t for t, g in golden.txns.items()
-              if any(e == c for _, e in g[0].values()) or (not g[0] and g[2] == c)
-              or any(v[2] == c for v in base.get(t, {}).values())]
+              if any(e == c for _, e in g[0].values()) or (not g[0] and g[2] == c) or any(v[2] == c for v in base.get(t, {}).values())]
         p_lines = rescore(golden, fix_txns(base, golden, tl)) - score0
-        p09 = 100 * S.W_EXC * max(0.0, TARGET_F1 - f1) / k_cls if sup else 0.0
-        cls_rows.append({"cls": c, "f1": f1, "sup": sup, "pred": int(r["pred_rows"]), "p_rows": p_rows, "p_lines": p_lines,
-                         "p09": p09, "small": sup < dev.SMALL_N})
-    cls_rows.sort(key=lambda r: -r["p_rows"])
+        classes.append({"class": c, "f1": f1, "support": sup, "pred_rows": int(r["pred_rows"]), "points_rows": p_rows,
+                        "points_lines": p_lines, "points_to_f1_09": 100 * S.W_EXC * max(0.0, TARGET_F1 - f1) / k_cls if sup else 0.0,
+                        "small": sup < dev.SMALL_N})
+    classes.sort(key=lambda r: -r["points_rows"])
+    out["classes"] = classes
+    out["macro_classes"] = k_cls
 
-    # ---- 3. taxonomy
-    tax = {}
-    etype = {}
-    for t in wrong:
-        e = error_type(golden.txns[t], pred.get(t))
-        etype[t] = e
-        tax.setdefault(golden.txns[t][3], Counter())[e] += 1
-
-    top = [r for r in seg_rows if r["wrong"]][:a.top]
-    replay = Replay(D, golden, bank) if top else None
-    detail = {}
-    for r in top:
-        seg = r["seg"]
-        w = sorted(r["wrong_txns"])
-        kinds = Counter()
+    # ---- detail of the top segments
+    top_segs = [s for s in segs if s["wrong"]][:top]
+    if top_segs:
+        log("[headroom] building the open-item replay and the pipeline's payer identification ...")
+        rp = hr_lib.Replay(run)
+        pid = hr_lib.PayerId(run, rp)
+    for s in top_segs:
+        seg = s["segment"]
+        w = sorted(t for t in seg_txns[seg] if t in wrong)
+        kinds, payer_how, payer_right = Counter(), Counter(), Counter()
         kind_of = {}
         for t in w:
-            if golden.txns[t][0]:
-                kind_of[t] = replay.classify(t)
-                kinds[kind_of[t]] += 1
-            else:
-                kind_of[t] = "sin partida"
-                kinds["sin partida"] += 1
-        # matcher
+            k, how, right = recoverability(run, rp, pid, t)
+            kind_of[t] = k
+            kinds[k] += 1
+            if k != "sin partida":
+                payer_how[how] += 1
+                payer_right["identificado y correcto" if right else ("identificado y distinto del golden" if how != "sin pagador" else "sin pagador")] += 1
         lab_n, lab_w = Counter(), Counter()
         for t in seg_txns[seg]:
             lab = why.get(t, "") or "(sin informe)"
             lab_n[lab] += 1
             if t in wrong:
                 lab_w[lab] += 1
-        # 5 examples: round-robin over error types (most frequent first), ids in order
         by_type = defaultdict(list)
         for t in w:
             by_type[etype[t]].append(t)
@@ -298,137 +228,151 @@ def main():
                 if i < len(by_type[k]) and len(ex) < 5:
                     ex.append(by_type[k][i])
             i += 1
-        detail[seg] = {"kinds": kinds, "lab_n": lab_n, "lab_w": lab_w, "examples": ex, "kind_of": kind_of}
+        nofound = sum(1 for t in w if etype[t] == "a" and (pred.get(t) is None or not pred[t]["items"]))
+        dif = difficulty(s["tax"], kinds)
+        frac = kinds["recall"] / s["wrong"]
+        s["detail"] = {
+            "kinds": dict(kinds), "payer_how": dict(payer_how), "payer_right": dict(payer_right), "a_not_found": nofound,
+            "passes": [{"label": lab, "wrong": lab_w[lab], "lines": n} for lab, n in sorted(lab_n.items(), key=lambda x: -lab_w[x[0]])
+                       if lab_w[lab]][:5],
+            "examples": [{"txn": t, "type": etype[t], "kind": kind_of[t], "pass": why.get(t, "")} for t in ex],
+            "difficulty": dif, "recall_fraction": frac, "recoverable_points": s["points"] * frac,
+            "priority": s["points"] * frac * EASE[dif]}
+    return out
 
-    # ---- difficulty heuristic + next experiment
-    def difficulty(seg):
-        d = detail[seg]
-        tc = tax[seg]
-        n = sum(tc.values())
-        findable = d["kinds"]["recall"] + d["kinds"]["ambiguity"] + d["kinds"]["not findable"]
-        amb = (d["kinds"]["ambiguity"] + d["kinds"]["not findable"]) / n
-        rec = d["kinds"]["recall"] / n
-        rule = (tc["b"] + tc["c"] + tc["d"]) / n
-        if rule >= 0.5 or rec >= 0.6:
-            return "baja", 1.0
-        if amb >= 0.6:
-            return "alta", 0.25
-        return "media", 0.5
 
-    def sentence(seg):
-        d, tc = detail[seg], tax[seg]
-        n = sum(tc.values())
-        dom, dn = tc.most_common(1)[0]
-        dom_name = dict(ERR_TYPES)[dom]
-        main_lab = d["lab_w"].most_common(1)[0]
-        k = d["kinds"]
-        if dom == "a" and k["not findable"] > max(k["recall"], k["ambiguity"]):
-            how = ("la mayoría son partidas que no estaban abiertas en ese momento (duplicados, devoluciones, consumidas antes): "
-                   "hace falta modelar el estado del ledger, no más cobertura")
-        elif dom == "a" and k["ambiguity"] > k["recall"]:
-            how = (f"la mayoría es ambigüedad (varios candidatos y sin referencia): hace falta un criterio de selección entre "
-                   f"candidatos (importes, fechas, FIFO), no más cobertura")
-        elif dom == "a":
-            how = "la mayoría es recall (referencia visible o pocos candidatos): ampliar la cobertura del matcher de referencias"
-        elif dom == "b":
-            how = "los pares son correctos: basta una regla para la excepción de esas filas"
-        elif dom == "c":
-            how = "los pares son correctos: revisar el cálculo del importe asignado a cada partida"
-        elif dom == "d":
-            how = "no hay partida: mejorar la regla de categoría/excepción del movimiento"
-        else:
-            how = "los pares emitidos son correctos pero sobran o faltan filas: ajustar el criterio de parada del emparejamiento"
-        return f"{pct(dn, n)} de sus fallos son «{dom_name}» (matcher principal `{main_lab[0]}`, {main_lab[1]} fallos); {how}."
+# ------------------------------------------------------------------ markdown
+def pct(x, n):
+    return f"{100 * x / n:.0f} %"
 
-    def pct(x, n):
-        return f"{100 * x / n:.0f} %"
 
-    # ------------------------------------------------------------------ write
-    L = [f"# Headroom of run `{a.run}`", "",
-         f"- Score del run: **{score0:.2f}** (result.json: {base_score:.2f}) → faltan **{gap:.2f}** puntos hasta 100.",
-         f"- Ventana: {res_json['meta'].get('window')}, {N} movimientos, dataset `{D}`.",
+def md_table(headers, rows, align=None):
+    align = align or ["l"] + ["r"] * (len(headers) - 1)
+    L = ["| " + " | ".join(headers) + " |", "|" + "|".join("---:" if a == "r" else "---" for a in align) + "|"]
+    for r in rows:
+        L.append("| " + " | ".join(str(c) for c in r) + " |")
+    return L
+
+
+def sentence(s):
+    d, tc = s["detail"], s["tax"]
+    n = s["wrong"]
+    dom, dn = max(tc.items(), key=lambda x: x[1])
+    k = d["kinds"]
+    lab = d["passes"][0] if d["passes"] else {"label": "-", "wrong": 0}
+    if dom == "a" and k.get("impossible", 0) > max(k.get("recall", 0), k.get("ambiguity", 0)):
+        how = "casi todo son partidas que no estaban abiertas en ese momento (duplicados, devoluciones, consumidas antes): hace falta modelar el estado del ledger, no más cobertura"
+    elif dom == "a" and k.get("ambiguity", 0) > k.get("recall", 0):
+        how = "domina la ambigüedad (sin referencia y muchos candidatos, o pagador no identificado): hace falta un criterio de selección entre candidatos o mejor identificación de pagador, no más cobertura"
+    elif dom == "a":
+        how = "domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher"
+    elif dom == "b":
+        how = "los pares son correctos: basta una regla para la excepción de esas filas"
+    elif dom == "c":
+        how = "los pares son correctos: revisar el importe asignado a cada partida"
+    elif dom == "d":
+        how = "no hay partida: mejorar la regla de categoría/excepción del movimiento"
+    else:
+        how = "los pares emitidos son correctos pero sobran o faltan filas: ajustar el criterio de parada del emparejamiento"
+    return f"{pct(dn, n)} son «{ERR_NAME[dom]}» (pase principal `{lab['label']}`, {lab['wrong']} fallos); {how}."
+
+
+def render_md(R, top):
+    segs, gap, score0 = R["segments"], R["gap"], R["score"]
+    wrong_segs = [s for s in segs if s["wrong"]]
+    L = [f"# Headroom of run `{R['run']}`", "",
+         f"- Score del run: **{score0:.2f}** → faltan **{gap:.2f}** puntos hasta 100.",
+         f"- Ventana: {R['window']}, {R['txns']} movimientos, dataset `{R['dataset']}`.",
          "- Método: se reconstruye el envío del run con las filas de un segmento (o clase) sustituidas por el golden y se repuntúa "
          "con el scorer oficial (`starter/bankrec_score.py`); puntos = score nuevo − score del run. Cifras exactas, no aproximadas.",
-         f"- Comprobaciones hechas por la herramienta: el envío sin modificar reproduce {base_score:.2f}; sustituir todos los segmentos "
-         f"da {oracle:.2f}.", ""]
-
+         f"- Comprobaciones: el envío sin modificar reproduce el score de `result.json`; sustituir todos los segmentos da {R['oracle']:.2f}.", ""]
     L += ["## 1. Margen por segmento", "",
           "Puntos que sube el score si los movimientos del segmento pasan a ser exactamente el golden (segmentos sin fallos: 0,00, omitidos).", ""]
     L += md_table(["segmento", "movimientos", "accuracy actual", "mal", "puntos", "% del gap"],
-                  [[r["seg"], r["n"], f"{r['acc']:.3f}", r["wrong"], pts(r["pts"]), pct(r["pts"], gap)]
-                   for r in seg_rows if r["wrong"]])
-    resid = gap - total_seg
-    L += ["", f"**Coherencia**: suma de márgenes por segmento = **{total_seg:.2f}** frente a **{gap:.2f}** que faltan "
-          f"(100 − {score0:.2f}); diferencia {resid:+.2f}. No coinciden exactamente porque el score no es lineal "
-          f"(F1 de asignación y macro-F1 de excepciones son cocientes): cada segmento se mide aislado, con el resto tal como está, "
-          f"mientras que corregirlos todos a la vez da exactamente 100. Los movimientos mal suman {len(wrong)} "
-          f"({100 * len(wrong) / N:.2f} % de {N}), que por sí solo vale {100 * S.W_TXN * len(wrong) / N:.2f} puntos del término de accuracy (peso 0,3).", ""]
-
+                  [[s["segment"], s["n"], f"{s['accuracy']:.3f}", s["wrong"], f"{s['points']:.2f}", pct(s["points"], gap)]
+                   for s in wrong_segs])
+    tot = R["sum_segment_points"]
+    L += ["", f"**Coherencia**: suma de márgenes por segmento = **{tot:.2f}** frente a **{gap:.2f}** que faltan (100 − {score0:.2f}); "
+          f"diferencia {gap - tot:+.2f}. No coinciden exactamente porque el score no es lineal (F1 de asignación y macro-F1 de "
+          f"excepciones son cocientes): cada segmento se mide aislado, con el resto tal como está, mientras que corregirlos todos a "
+          f"la vez da exactamente 100. Los {R['wrong']} movimientos mal ({100 * R['wrong'] / R['txns']:.2f} % de {R['txns']}) valen por "
+          f"sí solos {100 * S.W_TXN * R['wrong'] / R['txns']:.2f} puntos del término de accuracy (peso 0,3).", ""]
     L += ["## 2. Margen por clase de excepción", "",
           "«Filas»: se sustituyen solo las filas de esa clase (las enviadas y las del golden) y el resto del envío queda igual. "
           "«Líneas»: se sustituyen por el golden todos los movimientos donde esa clase aparece en el envío o en el golden "
-          "(incluye el efecto sobre accuracy del movimiento). «A F1 0,9»: puntos del término macro-F1 si la clase llegara a F1 0,9 "
-          f"(= 100·0,2·(0,9 − F1)/{k_cls} clases con soporte; 0 si ya la supera).", ""]
+          "(incluye el efecto sobre la accuracy del movimiento). «A F1 0,9»: puntos del término macro-F1 si la clase llegara a F1 0,9 "
+          f"(= 100·0,2·(0,9 − F1)/{R['macro_classes']} clases con soporte; 0 si ya la supera).", ""]
     L += md_table(["clase", "F1 actual", "soporte", "filas enviadas", "puntos (filas)", "puntos (líneas)", "puntos a F1 0,9", "nota"],
-                  [[r["cls"], f"{r['f1']:.3f}", r["sup"], r["pred"], pts(r["p_rows"]), pts(r["p_lines"]), pts(r["p09"]),
-                    "(n pequeño)" if r["small"] else ""] for r in cls_rows], align=["l"] + ["r"] * 6 + ["l"])
+                  [[c["class"], f"{c['f1']:.3f}", c["support"], c["pred_rows"], f"{c['points_rows']:.2f}", f"{c['points_lines']:.2f}",
+                    f"{c['points_to_f1_09']:.2f}", "(n pequeño)" if c["small"] else ""] for c in R["classes"]],
+                  align=["l"] + ["r"] * 6 + ["l"])
     L += [""]
-
     L += ["## 3. Taxonomía de los movimientos mal, por segmento", "",
           "Cada movimiento mal cae en un único tipo, por este orden: (d) el golden no tiene partidas y la respuesta difiere; "
           "(a) se respondió sin partidas o con un conjunto de partidas que no contiene ni está contenido en el golden; "
           "(e) el conjunto enviado es subconjunto/superconjunto estricto del golden; con el mismo conjunto: (b) alguna excepción difiere, "
           "si no (c) algún importe difiere más allá de la tolerancia.", ""]
     L += md_table(["segmento", "mal", "(a) pares", "(b) excepción", "(c) importe", "(d) categoría", "(e) filas +/−"],
-                  [[r["seg"], r["wrong"]] + [tax[r["seg"]][k] for k in "abcde"] for r in seg_rows if r["wrong"]]
-                  + [["**total**", len(wrong)] + [sum(c[k] for c in tax.values()) for k in "abcde"]])
+                  [[s["segment"], s["wrong"]] + [s["tax"][k] for k in "abcde"] for s in wrong_segs]
+                  + [["**total**", R["wrong"]] + [sum(s["tax"][k] for s in wrong_segs) for k in "abcde"]])
     L += [""]
-
-    L += [f"## 4. Detalle del top {len(top)} por puntos", "",
-          "Los ejemplos son bank_txn_id mal, uno de cada tipo de error por turnos, para `inspect_txn.py` "
-          "(esa herramienta no existe aún en este checkout). Recall = el golden estaba abierto y había referencia visible o ≤ 5 "
-          "candidatos en rango; ambigüedad = abierto, sin referencia y > 5 candidatos; no localizable = alguna partida no estaba abierta "
-          "en ese momento (mismo método que `notes/bolsa_*.md`, ver `solution/tools/bolsa.py`).", ""]
-    for r in top:
-        seg, d = r["seg"], detail[r["seg"]]
-        L += [f"### {seg} — {pts(r['pts'])} pts, {r['wrong']} mal de {r['n']}", ""]
-        tc = tax[seg]
-        nofound = sum(1 for t in r["wrong_txns"] if etype[t] == "a" and (pred.get(t) is None or not pred[t]["items"]))
+    tops = [s for s in wrong_segs if "detail" in s][:top]
+    L += [f"## 4. Detalle del top {len(tops)} por puntos", "",
+          "Los ejemplos son bank_txn_id mal, uno de cada tipo de error por turnos, para `solution/tools/inspect_txn.py <run> <id>`. "
+          "**Recuperabilidad** de cada movimiento fallado, con el pagador que identifica el propio pipeline (no el del golden; ver "
+          "`PayerId` en `hr_lib.py`: partidas que el envío asignó, IBAN, nombre/historial de TRAIN): "
+          "*recall* = hay referencia del golden visible en el texto, o el pagador identificado tiene todas las partidas del golden entre "
+          "sus abiertas y ≤ 5 en rango; *ambigüedad* = el resto (sin referencia, > 5 candidatos, o pagador no identificado / distinto); "
+          "*imposible* = alguna partida del golden no estaba abierta en ese momento (duplicado, consumida, devuelta, fuera del ledger).", ""]
+    for s in tops:
+        d = s["detail"]
+        L += [f"### {s['segment']} — {s['points']:.2f} pts, {s['wrong']} mal de {s['n']}", ""]
+        tc = s["tax"]
         L.append("- Tipos de error: " + ", ".join(f"({k}) {tc[k]}" for k in "abcde" if tc[k])
-                 + (f". De los (a), {nofound} se respondieron sin ninguna partida (no encontrado) y {tc['a'] - nofound} con otras partidas" if tc["a"] else "") + ".")
+                 + (f". De los (a), {d['a_not_found']} se respondieron sin ninguna partida y {tc['a'] - d['a_not_found']} con otras partidas"
+                    if tc["a"] else "") + ".")
         k = d["kinds"]
-        L.append("- Fallo de: " + ", ".join(f"{name} {k[key]}" for key, name in
-                                            (("recall", "recall"), ("ambiguity", "ambigüedad"), ("not findable", "no localizable"),
-                                             ("sin partida", "sin partida (categoría)")) if k[key]) + ".")
-        if why:
-            L.append("- Pase que los resuelve (fallos / movimientos del segmento por pase): " + "; ".join(
-                f"`{lab}` {d['lab_w'][lab]}/{n}" for lab, n in sorted(d["lab_n"].items(), key=lambda x: -d["lab_w"][x[0]])[:5]
-                if d["lab_w"][lab]) + ".")
-        else:
-            L.append("- Pase: sin informe de pases (`why.csv`) en este run.")
-        L.append("- Ejemplos: " + ", ".join(f"`{t}` ({etype[t]}, {d['kind_of'][t]}, {why.get(t, '-') or '-'})" for t in d["examples"]))
+        L.append("- Recuperabilidad: " + ", ".join(f"{name} {k[key]}" for key, name in
+                                                  (("recall", "(a) recall"), ("ambiguity", "(b) ambigüedad"), ("impossible", "(c) imposible"),
+                                                   ("sin partida", "sin partida (categoría)")) if k.get(key)) +
+                 f". Fracción recall {100 * d['recall_fraction']:.0f} % → **{d['recoverable_points']:.2f} puntos recuperables**.")
+        pr = d["payer_right"]
+        if pr:
+            L.append("- Pagador que identifica el pipeline (movimientos con partidas en el golden): " +
+                     ", ".join(f"{n} {v}" for n, v in sorted(pr.items(), key=lambda x: -x[1])) + "; por vía: " +
+                     ", ".join(f"{n} {v}" for n, v in sorted(d["payer_how"].items(), key=lambda x: -x[1])) + ".")
+        if d["passes"]:
+            L.append("- Pase que los resuelve (fallos / movimientos del segmento por pase): " +
+                     "; ".join(f"`{p['label']}` {p['wrong']}/{p['lines']}" for p in d["passes"]) + ".")
+        L.append("- Ejemplos: " + ", ".join(f"`{e['txn']}` ({e['type']}, {e['kind']}, {e['pass'] or '-'})" for e in d["examples"]))
         L.append("")
-
     L += ["## 5. Siguiente experimento", "",
           "Dificultad estimada (heurística, no medida): **baja** si ≥ 50 % de los fallos son de excepción/importe/categoría (b/c/d) o ≥ 60 % "
-          "son recall; **alta** si ≥ 60 % son ambigüedad o no localizables; **media** el resto. Prioridad = puntos × (1 / 0,5 / 0,25 "
-          "para baja / media / alta).", ""]
-    nx = []
-    for r in top:
-        dif, f = difficulty(r["seg"])
-        nx.append((r["pts"] * f, r, dif))
-    nx.sort(key=lambda x: -x[0])
-    L += md_table(["#", "segmento", "puntos", "tipo dominante", "recall / ambigüedad", "dificultad", "prioridad", "qué probar"],
-                  [[i + 1, r["seg"], pts(r["pts"]), dict(ERR_TYPES)[tax[r["seg"]].most_common(1)[0][0]],
-                    f"{detail[r['seg']]['kinds']['recall']} / {detail[r['seg']]['kinds']['ambiguity'] + detail[r['seg']]['kinds']['not findable']}",
-                    dif, f"{pr:.2f}", sentence(r["seg"])] for i, (pr, r, dif) in enumerate(nx)],
-                  align=["r", "l", "r", "l", "r", "l", "r", "l"])
+          "son recall; **alta** si ≥ 60 % son ambigüedad o imposibles; **media** el resto. *Puntos recuperables* = puntos × fracción (a) "
+          "recall. Prioridad = puntos recuperables × (1 / 0,5 / 0,25 para baja / media / alta).", ""]
+    nx = sorted(tops, key=lambda s: -s["detail"]["priority"])
+    L += md_table(["#", "segmento", "puntos", "recuperables", "tipo dominante", "recall / ambig. / imposible", "dificultad", "prioridad", "qué probar"],
+                  [[i + 1, s["segment"], f"{s['points']:.2f}", f"{s['detail']['recoverable_points']:.2f}",
+                    ERR_NAME[max(s["tax"].items(), key=lambda x: x[1])[0]],
+                    f"{s['detail']['kinds'].get('recall', 0)} / {s['detail']['kinds'].get('ambiguity', 0)} / {s['detail']['kinds'].get('impossible', 0)}",
+                    s["detail"]["difficulty"], f"{s['detail']['priority']:.2f}", sentence(s)] for i, s in enumerate(nx)],
+                  align=["r", "l", "r", "r", "l", "r", "l", "r", "l"])
     L += [""]
+    return L
 
-    out = a.out or os.path.join(dev.ROOT, "notes", f"headroom_{a.run}.md")
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("run")
+    ap.add_argument("--data", default=None, help="dev dataset dir (default: the one recorded in result.json)")
+    ap.add_argument("--top", type=int, default=10, help="segments in the detailed sections (default 10)")
+    ap.add_argument("--out", default=None, help="output file (default notes/headroom_<run>.md)")
+    a = ap.parse_args()
+    R = compute(a.run, a.data, a.top)
+    out = a.out or os.path.join(hr_lib.ROOT, "notes", f"headroom_{R['run']}.md")
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    open(out, "w", encoding="utf-8").write("\n".join(L) + "\n")
-    print(f"[headroom] {a.run}: score {score0:.2f}, gap {gap:.2f}, sum of segment margins {total_seg:.2f} -> {out}")
+    open(out, "w", encoding="utf-8").write("\n".join(render_md(R, a.top)) + "\n")
+    print(f"[headroom] {R['run']}: score {R['score']:.2f}, gap {R['gap']:.2f}, sum of segment margins {R['sum_segment_points']:.2f} -> {out}")
 
 
 if __name__ == "__main__":

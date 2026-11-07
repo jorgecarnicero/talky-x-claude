@@ -153,6 +153,7 @@ class Ctx:
         self.bank = bank.sort_values(["booking_date", "bank_txn_id"]).reset_index(drop=True)
         self.items = items.set_index("item_id", drop=False)
         self.open = self._opening(dfrom, golden_opening)
+        self._fill_missing_items()
         # memory trim: keep open items + anything issued in the 2 years before the first bank line (duplicates,
         # replaced invoices, returns need recently-closed items too)
         start = self.bank.booking_date.min() if len(self.bank) else (dfrom or "2000-01-01")
@@ -169,6 +170,7 @@ class Ctx:
         it = self.items
         if self.phase in ("live", "final"):
             oi = _read(os.path.join(self.phase_dir, "open_items_at_start.csv.gz"))
+            self._oi = oi
             op = dict(zip(oi.item_id, oi.open_amount.astype(float)))
             start = self.bank.booking_date.min()
             new = it[it.issue_date >= start]  # phase start = first bank line (2025-07-01 LIVE, 2026-01-01 FINAL)
@@ -195,6 +197,28 @@ class Ctx:
             old = set(it.item_id[(it.issue_date < "2022-01-01")])
             op = {k: v for k, v in op.items() if v > 0.005 and (k in ever or k not in old)}
         return op
+
+    def _fill_missing_items(self):
+        """Open items that are in no item file (only in open_items_at_start) get a minimal row, so that no pass
+        hits a KeyError and the amount is not invisible to the matchers."""
+        oi = getattr(self, "_oi", None)
+        if oi is None:
+            return
+        missing = set(self.open) - set(self.items.item_id)
+        if not missing:
+            return
+        m = oi[oi.item_id.isin(missing)]
+        print(f"[data] {len(missing)} open items not in any item file: minimal rows built from open_items_at_start "
+              f"({len(m)} found there)", flush=True)
+        rows = pd.DataFrame({
+            "item_id": m.item_id, "item_type": m.item_type, "entity": m.entity, "party_id": m.party_id,
+            "party_name": "", "doc_number": m.document_number, "issue_date": m.issue_date, "due_date": m.due_date,
+            "currency": m.currency, "total": m.total_amount.astype(float), "payment_terms": "", "po": "",
+            "payment_method": "", "related_document": "", "reason": ""})[ITEM_COLS]
+        self.items = pd.concat([self.items.reset_index(drop=True), rows], ignore_index=True) \
+            .drop_duplicates("item_id", keep="first").set_index("item_id", drop=False)
+        for k in missing - set(m.item_id):  # open amount with no row to describe it: cannot be matched
+            self.open.pop(k, None)
 
     def _golden_items(self):
         g = _cached("golden_train", lambda: _read(os.path.join(self.root, "train", "golden_allocations.csv.gz")))

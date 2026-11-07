@@ -98,6 +98,9 @@ def t_leak():
                 chk.append((f"live {sub}.{col} <= end", f"SELECT MAX({col}) FROM {sel}", "<=", END))
     chk += [("train advices received < start", f"SELECT MAX(received_date) FROM {rd(p('train', 'remittance_advices', 'index.csv'))}", "<", START),
             ("live advices received >= start", f"SELECT MIN(received_date) FROM {rd(p('live', 'remittance_advices', 'index.csv'))}", ">=", START),
+            ("train pdfs document_date < start", f"SELECT MAX(document_date) FROM {rd(p('train', 'pdfs', 'index.csv'))}", "<", START),
+            ("live pdfs document_date >= start", f"SELECT MIN(document_date) FROM {rd(p('live', 'pdfs', 'index.csv'))}", ">=", START),
+            ("live pdfs document_date <= end", f"SELECT MAX(document_date) FROM {rd(p('live', 'pdfs', 'index.csv'))}", "<=", END),
             ("live advices received <= end", f"SELECT MAX(received_date) FROM {rd(p('live', 'remittance_advices', 'index.csv'))}", "<=", END)]
     for name, sql, op, ref in chk:
         v = one(sql)
@@ -119,13 +122,13 @@ def t_leak():
     if n:
         bad.append(f"{n} bank lines are in both train and live")
     # every advice listed exists; no advice file on disk outside its index
-    for side in ("train", "live"):
-        base = p(side, "remittance_advices")
+    for side, sub in [(s_, u_) for s_ in ("train", "live") for u_ in ("remittance_advices", "pdfs")]:
+        base = p(side, sub)
         listed = {r[0] for r in con.execute(f"SELECT file FROM {rd(os.path.join(base, 'index.csv'))}").fetchall()}
         on_disk = {os.path.join(e, f) for e in os.listdir(base) if os.path.isdir(os.path.join(base, e))
                    for f in os.listdir(os.path.join(base, e))}
         if listed != on_disk:
-            bad.append(f"{side} advices: {len(listed ^ on_disk)} files differ from the index")
+            bad.append(f"{side} {sub}: {len(listed ^ on_disk)} files differ from the index")
     verdict("leak", not bad, f"{len(chk) + 5} checks" + ("" if not bad else "; " + " | ".join(bad)))
 
 

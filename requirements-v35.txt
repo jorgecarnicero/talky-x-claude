@@ -1,0 +1,8 @@
+pandas>=2.0
+numpy
+pyarrow
+rapidfuzz
+pdfplumber
+PyMuPDF
+openpyxl
+scikit-learn

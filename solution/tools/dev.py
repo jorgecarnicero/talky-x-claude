@@ -87,6 +87,47 @@ def run_pipeline(d, run_dir, fresh):
     return sub, why, time.time() - t0
 
 
+V35_PASSES = "batches,remittance,ap_match,nonitem,v3import,ar_match,v3rest"
+
+
+def run_v35(d, run_dir, fresh):
+    """v3.5 as in run_v35.sh, but fully scoped to the dataset: data AND parquet caches live inside `d`
+    (BANKREC_DATA / BANKREC_CACHE), so nothing survives between windows or leaks from the full TRAIN."""
+    os.makedirs(run_dir, exist_ok=True)
+    cache = os.path.join(d, "solution", "cache", "v35")
+    if fresh:
+        shutil.rmtree(cache, ignore_errors=True)
+    env = {**os.environ, "PYTHONHASHSEED": "0", "BANKREC_DATA": d, "BANKREC_CACHE": cache}
+    py = sys.executable
+    t0 = time.time()
+    v3_sub, v3_why = os.path.join(run_dir, "sub_v3.csv.gz"), os.path.join(run_dir, "why_v3.csv")
+    steps = [[py, os.path.join(ROOT, "solution", "bankrec.py"), "--phase", "live", "--data", d, "--out", v3_sub, "--why", v3_why]]
+    for ph in ("train", "live"):
+        for kind in ("ra", "pdf"):
+            if not os.path.exists(os.path.join(cache, f"docs_{kind}_{ph}.parquet")):
+                steps.append([py, os.path.join(ROOT, "src", "docs_extract.py"), "--data", d, "--phase", ph, "--only", kind])
+    sub, src = os.path.join(run_dir, "sub.csv.gz"), os.path.join(run_dir, "sources.csv")
+    steps.append([py, os.path.join(ROOT, "src", "pipeline.py"), "--data", d, "--phase", "live", "--passes", V35_PASSES,
+                  "--sources", src, "--out", sub])
+    for st in steps:
+        e = {**env, "V3_SUB": v3_sub}
+        if subprocess.run(st, env=e).returncode:
+            sys.exit("step failed: " + " ".join(st[:3]))
+    why = os.path.join(run_dir, "why.csv")
+    v3w = {}
+    with open(v3_why, newline="", encoding="utf-8") as fh:
+        v3w = {r["bank_txn_id"]: r["why"] for r in csv.DictReader(fh)}
+    with open(src, newline="", encoding="utf-8") as fh, open(why, "w", newline="", encoding="utf-8") as out:
+        w = csv.writer(out)
+        w.writerow(["bank_txn_id", "why"])
+        for r in csv.DictReader(fh):
+            lab = r["source"]
+            if lab in ("v3", "v3rest"):
+                lab = f"{lab}:{v3w.get(r['bank_txn_id'], '') or 'no-pass'}"
+            w.writerow([r["bank_txn_id"], lab])
+    return sub, why, time.time() - t0
+
+
 def read_sub(path):
     op = gzip.open if path.endswith(".gz") else open
     pred = {}  # txn -> {"items": {item: (amt, exc)}, "cat": None, "exc": None}
@@ -159,6 +200,55 @@ def class_stats(golden, pred):
     return rows
 
 
+def is_unexplained(label, p):
+    """no pass explained the line: v3.5 fallback, v3's own fallthrough (no matcher), or a bare UNIDENTIFIED answer"""
+    return (label == "fallback" or label.endswith(":no-pass") or label.endswith(":category")
+            or (p is not None and p["cat"] == "UNIDENTIFIED"))
+
+
+def pass_report(golden, pred, why, run_dir):
+    """Per pass (label before ':') and per full label: lines it explained, accuracy, wrong lines, weakest segments.
+    Written to passes.csv / passes_detail.csv; also the share of lines left without any pass."""
+    if not why:
+        return []
+    agg, det, segs = {}, {}, {}
+    un = {"n": 0, "ok": 0}
+    unall = {"n": 0, "ok": 0}
+    for t, g in golden.txns.items():
+        lab = why.get(t, "") or "no-pass"
+        ok = txn_ok(g, pred.get(t))
+        top = lab.split(":")[0]
+        for key, tab in ((top, agg), (lab, det)):
+            a = tab.setdefault(key, [0, 0])
+            a[0] += 1
+            a[1] += ok
+        if not ok:
+            sg = segs.setdefault(top, {})
+            sg[g[3]] = sg.get(g[3], 0) + 1
+        if is_unexplained(lab, pred.get(t)):
+            un["n"] += 1
+            un["ok"] += ok
+    total = len(golden.txns)
+    rows = []
+    for k, (n, okn) in agg.items():
+        worst = sorted(segs.get(k, {}).items(), key=lambda x: -x[1])[:3]
+        rows.append({"pass": k, "lines": n, "share": round(n / total, 4), "accuracy": round(okn / n, 4), "wrong": n - okn,
+                     "worst_segments": "; ".join(f"{a}({b})" for a, b in worst)})
+    rows.sort(key=lambda r: -r["wrong"])
+    with open(os.path.join(run_dir, "passes.csv"), "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    drows = sorted(({"label": k, "lines": n, "accuracy": round(o / n, 4), "wrong": n - o} for k, (n, o) in det.items()),
+                   key=lambda r: -r["wrong"])
+    with open(os.path.join(run_dir, "passes_detail.csv"), "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, list(drows[0]))
+        w.writeheader()
+        w.writerows(drows)
+    return {"rows": rows, "unexplained": {"lines": un["n"], "share": round(un["n"] / total, 4),
+                                           "correct": un["ok"], "accuracy": round(un["ok"] / un["n"], 4) if un["n"] else None}}
+
+
 def score(d, sub_path, run_dir, why_path=None, meta=None):
     live_bt = os.path.join(d, "live", "bank_transactions.csv.gz")
     cats = [r["category"] for r in csv.DictReader(open(os.path.join(d, "masters", "categories.csv"), encoding="utf-8"))]
@@ -208,9 +298,10 @@ def score(d, sub_path, run_dir, why_path=None, meta=None):
         w = csv.DictWriter(fh, list(cls[0]))
         w.writeheader()
         w.writerows(cls)
+    pass_rows = pass_report(golden, pred, why, run_dir)
     out = {"score": res["score"], "metrics": res["metrics"], "meta": meta or {},
            "segments": {r["segment"]: r["accuracy"] for r in seg_rows},
-           "classes": {r["class"]: {"f1": r["f1"], "support": r["golden_rows"]} for r in cls}}
+           "passes": pass_rows, "classes": {r["class"]: {"f1": r["f1"], "support": r["golden_rows"]} for r in cls}}
     json.dump(out, open(os.path.join(run_dir, "result.json"), "w"), indent=1)
 
     m = res["metrics"]
@@ -223,6 +314,14 @@ def score(d, sub_path, run_dir, why_path=None, meta=None):
           "## Segments by lost lines", "", "| segment | n | accuracy | wrong | lost pts |", "|---|---:|---:|---:|---:|"]
     for r in seg_rows[:25]:
         L.append(f"| {r['segment']} | {r['n']} | {r['accuracy']:.3f} | {r['wrong']} | {r['lost_points']:.2f} |")
+    if pass_rows:
+        L += ["", "## Passes (lines explained, by wrong lines)", "", "| pass | lines | share | accuracy | wrong | weakest segments |",
+              "|---|---:|---:|---:|---:|---|"]
+        for r in pass_rows["rows"]:
+            L.append(f"| {r['pass']} | {r['lines']} | {r['share']:.3f} | {r['accuracy']:.3f} | {r['wrong']} | {r['worst_segments']} |")
+        u = pass_rows["unexplained"]
+        L += ["", f"Lines left without any pass: {u['lines']} ({100 * u['share']:.1f} %), {u['correct']} correct "
+              f"({'-' if u['accuracy'] is None else format(100 * u['accuracy'], '.1f')} %)."]
     L += ["", "## Exception classes", "", "| class | pred | golden | precision | recall | F1 | |", "|---|---:|---:|---:|---:|---:|---|"]
     for r in cls:
         L.append(f"| {r['class']} | {r['pred_rows']} | {r['golden_rows']} | {r['precision']:.3f} | {r['recall']:.3f} | "
@@ -240,6 +339,8 @@ def main():
     ap.add_argument("--out", default=None, help="dataset directory (default: ~/hackdata/data_dev*, one per window); "
                     "use your own to run a different window in parallel without touching data_dev")
     ap.add_argument("--src", default=os.path.expanduser("~/hackdata/data"), help="extracted hackathon data (train/, masters/)")
+    ap.add_argument("--engine", choices=["v35", "v3"], default="v35" if os.path.exists(os.path.join(ROOT, "src", "pipeline.py")) else "v3",
+                    help="v35 = solution/bankrec.py + src/pipeline.py passes (as run_v35.sh); v3 = solution/bankrec.py alone")
     ap.add_argument("--rebuild", action="store_true", help="rebuild the dev dataset")
     ap.add_argument("--fresh", action="store_true", help="delete the pipeline caches (PDF advices, items, category model)")
     ap.add_argument("--score-only", default=None, metavar="SUB", help="score this submission instead of running the pipeline")
@@ -263,13 +364,17 @@ def main():
         if not shutil.which("pdftotext"):
             print("[dev] WARNING: pdftotext not on PATH, PDF advices skipped: scores are NOT comparable with runs that parse them")
             meta["pdftotext"] = "MISSING"
-        sub, why, secs = run_pipeline(d, run_dir, a.fresh)
+        sub, why, secs = (run_v35 if a.engine == "v35" else run_pipeline)(d, run_dir, a.fresh)
+        meta["engine"] = a.engine
         meta["pipeline seconds"] = round(secs, 1)
     t0 = time.time()
     out = score(d, sub, run_dir, why, meta)
     print("[dev] exception classes (F1 / golden support):")
     for c, v in out["classes"].items():
         print(f"   {c:20s} F1 {v['f1']:.3f}  n={v['support']:>6}{'   (poco fiable: n<100)' if v['support'] < SMALL_N else ''}")
+    if out.get("passes"):
+        u = out["passes"]["unexplained"]
+        print(f"[dev] lines without any pass: {u['lines']} ({100 * u['share']:.1f} %), correct {u['correct']}")
     print(f"[dev] {name}: score {out['score']:.2f}  ({json.dumps({k: out['metrics'][k] for k in ('allocation_f1', 'txn_accuracy', 'exception_macro_f1')})})"
           f"  scored in {time.time() - t0:.0f}s -> {run_dir}/report.md")
 

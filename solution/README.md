@@ -39,7 +39,7 @@ Quick smoke test: `--phase sample` + `python starter/score_train.py sub_sample.c
 the dataset (`pip install duckdb`) and `pdftotext` on PATH (without it PDF advices are skipped and the score is not comparable).
 
 ```
-python solution/tools/dev.py --name my-idea            # window 2025-04-01..2025-05-31, ~2 min; writes dev_runs/my-idea/
+python solution/tools/dev.py --name my-idea            # engine v35 if src/pipeline.py exists (--engine v3 for v3 alone); window 2025-04-01..2025-05-31, ~2 min; writes dev_runs/my-idea/
 python solution/tools/dev.py --name v3 --src /path/to/data     # --src: folder with train/ and masters/ (default ~/hackdata/data)
 python solution/tools/compare.py v3 my-idea            # ACCEPT iff score up and no >90 % segment drops > 0.5 pts
 python solution/tools/dev.py --start 2025-04-01 --end 2025-05-31 --out ~/hackdata/data_dev_mine --name my-idea   # own dataset dir: parallel runs do not clash

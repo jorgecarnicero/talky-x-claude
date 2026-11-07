@@ -6,7 +6,7 @@
 
 Layout written to --out (never inside the repo):
   live/     bank lines, AR/AP invoices, credit notes issued in [start, end]; batches / cheques / card settlements /
-            payment runs dated in the window; remittance advices (+ index.csv) received in the window; and
+            payment runs dated in the window; remittance advices and document PDFs (+ index.csv) dated in the window; and
             open_items_at_start.csv.gz = clean opening balance (items issued before `start`, still open at `start`
             according to the golden, excluding items that are never settled by a bank line anywhere in TRAIN).
   train/    ONLY data before `start` (bank lines, documents, batches, advices, golden_allocations).
@@ -134,20 +134,20 @@ def split_aux(con, src, out, sub, col, start, end):
     return n_tr, n_lv
 
 
-def split_advices(con, src, out, start, end):
-    base = os.path.join(src, "train", "remittance_advices")
+def split_indexed(con, src, out, sub, col, start, end):
+    """Folders with an index.csv (file, ..., <date col>): remittance_advices (received_date), pdfs (document_date)."""
+    base = os.path.join(src, "train", sub)
     idx = os.path.join(base, "index.csv")
     if not os.path.exists(idx):
         return 0, 0
     cnt = {"train": 0, "live": 0}
-    for side, cond in (("train", f"received_date < '{start}'"),
-                       ("live", f"received_date >= '{start}' AND received_date <= '{end}'")):
-        tgt = os.path.join(out, side, "remittance_advices", "index.csv")
+    for side, cond in (("train", f"{col} < '{start}'"), ("live", f"{col} >= '{start}' AND {col} <= '{end}'")):
+        tgt = os.path.join(out, side, sub, "index.csv")
         copy_query(con, f"SELECT * FROM {rd(idx)} WHERE {cond} ORDER BY file", tgt)
         for (fn,) in con.execute(f"SELECT file FROM {rd(tgt)}").fetchall():
             p = os.path.join(base, fn)
             if os.path.exists(p):
-                link_or_copy(p, os.path.join(out, side, "remittance_advices", fn))
+                link_or_copy(p, os.path.join(out, side, sub, fn))
                 cnt[side] += 1
     return cnt["train"], cnt["live"]
 
@@ -196,7 +196,8 @@ def build(src, out, start, end):
     counts = {}
     for sub, col in AUX.items():
         counts[sub] = split_aux(con, src, out, sub, col, start, end)
-    counts["remittance_advices"] = split_advices(con, src, out, start, end)
+    counts["remittance_advices"] = split_indexed(con, src, out, "remittance_advices", "received_date", start, end)
+    counts["pdfs"] = split_indexed(con, src, out, "pdfs", "document_date", start, end)
 
     # ---- masters
     shutil.copytree(os.path.join(src, "masters"), os.path.join(out, "masters"))

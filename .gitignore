@@ -35,3 +35,6 @@ dev_runs/
 solution/cache/
 *.csv.gz
 *.zip
+
+# v3.5 python env
+/.venv/

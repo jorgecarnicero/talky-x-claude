@@ -12,3 +12,9 @@ Calibration: v6b (same output as v6c) scored LIVE 93.31 and 94.20 on the HOLD mo
 Clean HOLD 93.91 => leak worth ~0.3 there; honest HOLD -> LIVE gap ~0.6 (LIVE 95 <=> HOLD ~95.6; goal keeps 96.2).
 Run time: ~570 s per window (both windows in parallel).
 | D1 | (probe, no code) | Statement payments: missed lines with >= 10 golden items (TUNE, 1.66 alloc pts) clear a contiguous due-date window of the customer's open items | 274 of 281 lines have gaps (e.g. 685 paid, 763 open items skipped inside the span) | – | – | REJECTED before coding: set not recoverable from the amount without the advice | TUNE only |
+
+## Windows changed (2026-11-07, docs/PROTOCOL.md "Changes"): tune 2024-10..11 / dev 2025-04..05 / sealed 2025-01..02
+
+| # | Tag | Change | tune | dev | Decision |
+|---|---|---|---|---|---|
+| B1 | base | Clean v8 baseline on the merged windows | 94.10 (alloc 95.25, txn 97.05, exc 86.84) | 93.93 (alloc 94.72, txn 96.72, exc 87.80) | reference. abs(tune - dev) = 0.17; dev - LIVE(v6c 93.31) = 0.62 |

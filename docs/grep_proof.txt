@@ -1,0 +1,22 @@
+$ grep -rnE "(BT|ARI|ARC|API|APC)-20[0-9]{2}-[0-9]{4,}|CUS[0-9]{5,}|SUP[0-9]{5,}" src solution/bankrec.py
+(no matches)
+
+$ grep -rnE "\b[A-Z]{2}[0-9]{2}[A-Z0-9]{12,30}\b" (IBAN-shaped) src solution/bankrec.py
+(no matches)
+
+$ grep -rnoE "\"20(2[1-6])-[0-9]{2}(-[0-9]{2})?\"" src solution/bankrec.py
+src/data.py:221:"2025-07-01"
+src/data.py:221:"2026-01-01"
+src/data.py:242:"2022-01-01"
+src/evaluate.py:22:"2025-01-01"
+src/evaluate.py:23:"2025-06-30"
+src/excdiag.py:27:"2024-10-01"
+src/excdiag.py:28:"2024-11-30"
+src/payer_dir.py:20:"2025-07-01"
+src/pointslost.py:71:"2024-10-01"
+src/pointslost.py:72:"2024-11-30"
+src/synth_final.py:21:"2025-12-15"
+src/unseen_gap.py:37:"2024-10-01"
+src/unseen_gap.py:38:"2024-11-30"
+solution/bankrec.py:202:"2025-07-01"
+solution/bankrec.py:202:"2026-01-01"

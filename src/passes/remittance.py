@@ -83,6 +83,8 @@ def run(ctx):
     dmin, dmax = bank.booking_date.min(), bank.booking_date.max()
     lo = str(pd.Timestamp(dmin) - pd.Timedelta(days=5))[:10]
     hi = str(pd.Timestamp(dmax) + pd.Timedelta(days=30))[:10]
+    if getattr(ctx, "horizon", None):  # dev window: no advice received after the window end
+        hi = min(hi, ctx.horizon)
     ra = ra[(ra.received_date >= lo) & (ra.received_date <= hi) & (ra.n_lines > 0)]
     if not len(ra):
         return

@@ -24,6 +24,8 @@ def load_side(ctx, sub, months_before=8, months_after=2):
         d0 = pd.Timestamp(ctx.bank.booking_date.min()) - pd.DateOffset(months=months_before)
         d1 = pd.Timestamp(ctx.bank.booking_date.max()) + pd.DateOffset(months=months_after)
         lo, hi = d0.strftime("%Y%m"), d1.strftime("%Y%m")
+        if getattr(ctx, "horizon", None):  # dev window: no side files after the window end
+            hi = min(hi, ctx.horizon[:7].replace("-", ""))
     else:
         lo, hi = "000000", "999999"
     frames, nbad = [], 0

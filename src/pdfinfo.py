@@ -44,6 +44,10 @@ def load_pdf_info(ctx, with_text=False):
         ctx.cache[key] = out
         return out
     info = pd.concat(frames, ignore_index=True).drop_duplicates("file", keep="last").reset_index(drop=True)
+    hz = getattr(ctx, "horizon", None)
+    if hz:  # dev window: no document dated after the window end (IBAN notices, replacements, instalment plans)
+        dd = info.document_date.fillna("").astype(str)
+        info = info[(dd == "") | (dd <= hz)].reset_index(drop=True)
     info["item_type"] = info.document_type.map(TYPE_MAP).fillna("")
     # link to items: (entity, type, norm(doc)) -> item id; disambiguate by party (vectorised merge)
     it = ctx.items

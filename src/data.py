@@ -177,6 +177,9 @@ class Ctx:
 
     def __init__(self, root, phase, dfrom=None, dto=None, golden_opening=True):
         self.root, self.phase = root, phase
+        # Dev windows on TRAIN: nothing dated after the window end may be used (LIVE / FINAL folders stop at their
+        # last month). None for live / final / unbounded runs.
+        self.horizon = dto if (phase == "train" and dto) else None
         chain = PHASE_CHAIN[phase]
         self.side_dirs = [os.path.join(root, p) for p in chain]
         self.phase_dir = self.side_dirs[-1]
@@ -235,14 +238,20 @@ class Ctx:
             # train-lite artifact: ~214k items issued in 2021 never appear in the golden and are NOT open in LIVE's
             # real open_items_at_start (checked: simulated 2025-07-01 balances agree 99.7% with the real ones once
             # these are removed). Drop never-settled 2021 items.
-            ever = set(self._golden_items())
+            ever = set(self._golden_items(dfrom))
             old = set(it.item_id[(it.issue_date < "2022-01-01")])
             op = {k: v for k, v in op.items() if v > 0.005 and (k in ever or k not in old)}
         return op
 
-    def _golden_items(self):
+    def _golden_items(self, before=None):
+        """Items that appear in the TRAIN golden; with `before`, only in lines booked before that date (no leakage of
+        the evaluated window or later months into the dev opening ledger)."""
         g = _cached("golden_train", lambda: _read(os.path.join(self.root, "train", "golden_allocations.csv.gz")))
-        return g.item_id[g.item_id != ""].unique()
+        g = g[g.item_id != ""]
+        if before:
+            dates = dict(zip(*[load_bank(self.root, "train")[c] for c in ("bank_txn_id", "booking_date")]))
+            g = g[g.bank_txn_id.map(dates) < before]
+        return g.item_id.unique()
 
     # --- helpers for passes
     def done(self, txn_id):

@@ -23,9 +23,11 @@ def main():
     raw = op(a.submission, "rb").read()
     if len(raw) > 60e6:
         errs.append(f"uncompressed size {len(raw)/1e6:.1f} MB > 60 MB")
-    mfolder = os.path.join(a.data, "final", "masters_final") if a.phase == "final" and os.path.isdir(
-        os.path.join(a.data, "final", "masters_final")) else os.path.join(a.data, "masters")
-    cats = {r["category"] for r in csv.DictReader(open(os.path.join(mfolder, "categories.csv"), encoding="utf-8"))}
+    # masters/ overlaid file by file with final/masters_final/ (it may contain only the files that changed)
+    cf = os.path.join(a.data, "final", "masters_final", "categories.csv")
+    if a.phase != "final" or not os.path.exists(cf):
+        cf = os.path.join(a.data, "masters", "categories.csv")
+    cats = {r["category"] for r in csv.DictReader(open(cf, encoding="utf-8"))}
     with gzip.open(os.path.join(a.data, a.phase, "bank_transactions.csv.gz"), "rt", encoding="utf-8") as fh:
         phase_ids = {r["bank_txn_id"] for r in csv.DictReader(fh)}
     rows = list(csv.reader(raw.decode("utf-8-sig").splitlines()))

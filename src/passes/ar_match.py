@@ -18,7 +18,7 @@ WH_COUNTRIES = {"MX", "BR", "MA"}
 WH_RATES = (0.0125, 0.015, 0.10)
 MAX_NODES = 6000
 DROP_DUST = os.environ.get("AR_DUST", "0") == "1"
-DUST_PCT = 0.031
+DUST_PCT = 0.031  # default; Matcher sets it to max(early_payment_discount_pct in payment_terms) + 0.1 pt
 ZERO_UNITS = True
 SUBSET_ALL = False
 DP_MAX_POOL = 80
@@ -49,6 +49,13 @@ def cents(x):
 class Matcher:
     def __init__(self, ctx):
         self.ctx = ctx
+        global DUST_PCT
+        try:  # a leftover <= the largest early-payment discount of the masters (POLICIES s.3) counts as "dust"
+            import pandas as pd
+            pt = ctx.masters["payment_terms"].early_payment_discount_pct
+            DUST_PCT = float(pd.to_numeric(pt, errors="coerce").max()) / 100 + 0.001
+        except Exception:
+            pass
         self.ix = ARIndex(ctx)
         if os.environ.get("PAYER_DIR", "0") == "1":
             import payer_dir

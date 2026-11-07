@@ -342,15 +342,18 @@ class Rec:
             lst.sort(key=lambda x: (x.issue or date.min, x.id))
 
     def _load_masters(self):
-        m = os.path.join(self.root, "masters")
-        if self.phase == "final" and os.path.isdir(os.path.join(self.root, "final", "masters_final")):
-            m = os.path.join(self.root, "final", "masters_final")
-        self.accounts = {r["account_id"]: r for r in rcsv(os.path.join(m, "bank_accounts.csv"))}
-        self.terms = {r["code"]: r for r in rcsv(os.path.join(m, "payment_terms.csv"))}
-        self.customers = {r["customer_id"]: r for r in rcsv(os.path.join(m, "customers.csv"))}
-        self.suppliers = {r["supplier_id"]: r for r in rcsv(os.path.join(m, "suppliers.csv"))}
+        base, fin = os.path.join(self.root, "masters"), os.path.join(self.root, "final", "masters_final")
+
+        def mf(name):  # overlay: a file present in final/masters_final wins, otherwise masters/ (like src/data.py)
+            if self.phase == "final" and os.path.exists(os.path.join(fin, name)):
+                return os.path.join(fin, name)
+            return os.path.join(base, name)
+        self.accounts = {r["account_id"]: r for r in rcsv(mf("bank_accounts.csv"))}
+        self.terms = {r["code"]: r for r in rcsv(mf("payment_terms.csv"))}
+        self.customers = {r["customer_id"]: r for r in rcsv(mf("customers.csv"))}
+        self.suppliers = {r["supplier_id"]: r for r in rcsv(mf("suppliers.csv"))}
         self.fx = defaultdict(dict)
-        for r in rcsv(os.path.join(m, "fx_rates.csv")):
+        for r in rcsv(mf("fx_rates.csv")):
             self.fx[r["currency"]][r["date"]] = float(r["units_per_eur"])
         self.party_by_iban = defaultdict(set)
         self.party_by_mandate = {}
@@ -516,6 +519,8 @@ class Rec:
 
     def month_window(self, before=3, after=1):
         lo, hi = (DEV_MONTHS[0], DEV_MONTHS[-1]) if self.phase == "dev" else self.PHASE_RANGE[self.phase]
+        if self.phase == "dev":  # no side file after the window end (LIVE / FINAL folders stop at their last month)
+            after = 0
 
         def shift(ym, k):
             y, m = int(ym[:4]), int(ym[4:]) + k
@@ -1629,15 +1634,16 @@ class CatModel:
                 (t["bank"], t["bank_code"], t["bank_subcode"], sg),
                 (t["bank_code"], sg)]
 
-    def fit(self, root, folder, exclude_months=()):
-        log("training category model on", folder, "excluding", list(exclude_months))
+    def fit(self, root, folder, exclude_months=(), before=None):
+        log("training category model on", folder, "excluding", list(exclude_months), "before", before)
         lab = {}
         for r in rcsv(os.path.join(root, folder, "golden_allocations.csv.gz")):
             if r["bank_txn_id"] not in lab:
                 lab[r["bank_txn_id"]] = r["category"] or "ITEM"
         for t in rcsv(os.path.join(root, folder, "bank_transactions.csv.gz")):
             y = lab.get(t["bank_txn_id"])
-            if y is None or t["booking_date"][:7].replace("-", "") in exclude_months:
+            ym = t["booking_date"][:7].replace("-", "")
+            if y is None or ym in exclude_months or (before and ym >= before):
                 continue
             for i, k in enumerate(self.keys(t)):
                 self.tabs[i]["|".join(k)][y] += 1
@@ -1681,13 +1687,14 @@ def main():
     DEV_MONTHS = sorted(a.months.split(","))
 
     model = CatModel()
-    excl = DEV_MONTHS if a.phase == "dev" else []
-    mp = os.path.join(root, "solution", "cache", "catmodel%s.json" % ("_excl_" + "_".join(excl) if excl else ""))
+    # dev: learn only from months BEFORE the window (LIVE / FINAL only ever have past labels)
+    before = DEV_MONTHS[0] if a.phase == "dev" else None
+    mp = os.path.join(root, "solution", "cache", "catmodel%s.json" % ("_before_" + before if before else ""))
     if os.path.exists(mp):
         model.load(mp)
     else:
         os.makedirs(os.path.dirname(mp), exist_ok=True)
-        model.fit(root, "train", exclude_months=set(excl))
+        model.fit(root, "train", before=before)
         model.save(mp)
 
     rec = Rec(root, a.phase)

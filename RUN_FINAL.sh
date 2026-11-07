@@ -4,7 +4,7 @@
 #   1. Download the FINAL archive from the hackathon site (Datos page) into:
 #        ~/Downloads/hackathons/claude-talky-accounting/data/
 #   2. Run:   bash ~/Downloads/hackathons/claude-talky-accounting/RUN_FINAL.sh <path-to-final-archive.tar.gz or extracted folder>
-#   3. Upload the file it prints at the end (out/sub_final_v6c.csv.gz) ONCE on the Enviar page (FINAL).
+#   3. Upload the file it prints at the end (out/sub_final_v7a.csv.gz) ONCE on the Enviar page (FINAL).
 #
 # Takes ~20-25 min. Close other heavy apps first. Never run two copies at once.
 # Also works for a dry run on LIVE:   bash RUN_FINAL.sh --live

@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# ONE-COMMAND FINAL SUBMISSION (v7c code, LIVE 93.61, frozen copy in FINAL_CODE_v7c/). Works without Claude.
+# ONE-COMMAND FINAL SUBMISSION (v7d order + best-guess postfix, LIVE 94.25; code in FINAL_CODE_v7c/). Works without Claude.
 #
 #   1. Download the FINAL archive from the hackathon site (Datos page) into:
 #        ~/Downloads/hackathons/claude-talky-accounting/data/
 #   2. Run:   bash ~/Downloads/hackathons/claude-talky-accounting/RUN_FINAL.sh <path-to-final-archive.tar.gz or extracted folder>
-#   3. Upload the file it prints at the end (out/sub_final_v7c.csv.gz) ONCE on the Enviar page (FINAL).
+#   3. Upload the file it prints at the end (out/sub_final_v7d_pf.csv.gz) ONCE on the Enviar page (FINAL).
 #
 # Takes ~20-25 min. Close other heavy apps first. Never run two copies at once.
 # Also works for a dry run on LIVE:   bash RUN_FINAL.sh --live
 set -euo pipefail
 P=~/Downloads/hackathons/claude-talky-accounting
 cd "$P"
-PASSES=batches,remittance,ap_match,nonitem,ar_multi,ar_pdf,v3import,ar_match,ar_multi_late,ar_bigpool,ar_dispute,v3rest,exc_fix,cancel_guard
+PASSES=batches,remittance,ap_match,nonitem,ar_multi,ar_pdf,ar_match,ar_multi_late,ar_bigpool,ar_dispute,v3import,v3rest,exc_fix,cancel_guard
 export AR_DUST=1 EXC_R5=1 PAYER_DIR=1 BANKREC_CACHE="$P/cache"
 PY="$P/repo/.venv/bin/python"
 
@@ -51,13 +51,15 @@ tail -1 out/run_${PHASE}_v3.log
 echo "== 4/6 remittance advices + PDF clauses  ($(date +%H:%M))"
 for ph in train live $PHASE; do (cd FINAL_CODE_v7c && $PY src/docs_extract.py --phase $ph) >> out/run_${PHASE}_docs.log 2>&1; done
 
-echo "== 5/6 v7c pipeline  ($(date +%H:%M))"
+echo "== 5/6 v7d pipeline (v7c code, our matchers before v3)  ($(date +%H:%M))"
 (cd FINAL_CODE_v7c && V3_SUB=../out/sub_${PHASE}_v3.csv.gz $PY src/pipeline.py --phase $PHASE --passes $PASSES \
-  --out ../out/sub_${PHASE}_v7c.csv.gz --sources ../out/${PHASE}_v7c_src.csv) > out/run_${PHASE}_v7c.log 2>&1 \
-  || { echo "PIPELINE FAILED - see out/run_${PHASE}_v7c.log. FALLBACK: upload out/sub_${PHASE}_v3.csv.gz (validate it first)"; exit 1; }
-grep -E "pass |wrote" out/run_${PHASE}_v7c.log
+  --out ../out/sub_${PHASE}_v7d.csv.gz --sources ../out/${PHASE}_v7d_src.csv) > out/run_${PHASE}_v7d.log 2>&1 \
+  || { echo "PIPELINE FAILED - see out/run_${PHASE}_v7d.log. FALLBACK: upload out/sub_${PHASE}_v3.csv.gz (validate it first)"; exit 1; }
+grep -E "pass |wrote" out/run_${PHASE}_v7d.log
 
-echo "== 6/6 validate  ($(date +%H:%M))"
-(cd FINAL_CODE_v7c && $PY src/validate_submission.py ../out/sub_${PHASE}_v7c.csv.gz --phase $PHASE)
+echo "== 6/6 best-guess post-processor + validate  ($(date +%H:%M))"
+(cd FINAL_CODE_v7c && $PY postfix.py ../out/sub_${PHASE}_v7d.csv.gz --phase $PHASE --out ../out/sub_${PHASE}_v7d_pf.csv.gz) \
+  || { echo "POSTFIX FAILED - upload out/sub_${PHASE}_v7d.csv.gz instead (validate it first)"; exit 1; }
+(cd FINAL_CODE_v7c && $PY src/validate_submission.py ../out/sub_${PHASE}_v7d_pf.csv.gz --phase $PHASE)
 echo
-echo ">>> UPLOAD THIS FILE: $P/out/sub_${PHASE}_v7c.csv.gz   (only if it says VALID above)"
+echo ">>> UPLOAD THIS FILE: $P/out/sub_${PHASE}_v7d_pf.csv.gz   (only if it says VALID above)"

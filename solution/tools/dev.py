@@ -114,7 +114,7 @@ def run_v35(d, run_dir, fresh):
     if os.path.exists(conf):
         kv = dict(l.strip().split("=", 1) for l in open(conf) if re.match(r"^[A-Z_0-9]+=", l))
         passes = kv.pop("PASSES", passes)
-        env = {**env, **kv}
+        env = {**env, **{k: v for k, v in kv.items() if k not in os.environ}}  # an explicit env var wins (ablations)
     elif os.path.exists(os.path.join(CODE, "run_v6a.sh")):
         passes, env = V6A_PASSES, {**env, "EXC_R5": "1", "PAYER_DIR": "1"}
     py = sys.executable

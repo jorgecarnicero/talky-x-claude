@@ -57,17 +57,18 @@ def payer_candidates(m, t):
     return sorted(cand, key=lambda c: -cand[c])[:TOPN]
 
 
-def run(ctx):
+def _claims(ctx):
+    """-> list of (bank_txn_id, rows). Pure: reads ctx, never mutates results (so a failure leaves the answer untouched)."""
     if os.environ.get("EXC_OVERPAY", "1") == "0":
         print("    exc_overpay: disabled (EXC_OVERPAY=0)")
-        return
+        return []
     from passes.exc_fix import opening
     m = ctx.cache.get("ar_matcher")
     if m is None:
         print("    exc_overpay: ar_matcher not in cache (run ar_match first)")
-        return
+        return []
     op = dict(opening(ctx))
-    n = 0
+    out = []
     for t in ctx.bank.itertuples():
         rows = ctx.results.get(t.bank_txn_id)
         if not rows:
@@ -94,8 +95,21 @@ def run(ctx):
                     hits.append((i, o))
         if len(hits) == 1:
             i, o = hits[0]
-            ctx.results[t.bank_txn_id] = [{"item_id": i, "amount": round(o, 2), "category": "", "exception": "OVERPAYMENT"}]
-            ctx.source[t.bank_txn_id] = "exc_overpay"
+            out.append((t.bank_txn_id, [{"item_id": i, "amount": round(o, 2), "category": "", "exception": "OVERPAYMENT"}]))
             op[i] = 0.0
-            n += 1
-    print(f"    exc_overpay: {n} unreferenced overpayments")
+    return out
+
+
+def run(ctx):
+    """Optional pass: any exception is logged and the previous answer is kept (the run does not abort)."""
+    try:
+        claims = _claims(ctx)
+    except Exception as ex:  # noqa: BLE001
+        import traceback
+        print(f"    exc_overpay: WARNING pass skipped, previous answer kept ({type(ex).__name__}: {ex})")
+        traceback.print_exc(file=sys.stdout)
+        return
+    for t, rows in claims:
+        ctx.results[t] = rows
+        ctx.source[t] = "exc_overpay"
+    print(f"    exc_overpay: {len(claims)} unreferenced overpayments")

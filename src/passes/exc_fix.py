@@ -27,7 +27,10 @@ ENABLE = {"R1": True, "R2": True, "R3": True, "R4": True,
           "R7": os.environ.get("EXC_R7", "0") == "1",
           "R8": os.environ.get("EXC_R8", "1") == "1",
           "R9": os.environ.get("EXC_R9", "1") == "1",
-          "R10": os.environ.get("EXC_R10", "1") == "1"}
+          "R10": os.environ.get("EXC_R10", "1") == "1",
+          "R11": os.environ.get("EXC_R11", "1") == "1",
+          "R12": os.environ.get("EXC_R12", "1") == "1",
+          "R13": os.environ.get("EXC_R13", "1") == "1"}
 SETTLE_WORDS = {"SETTLEMENT", "REGULARIZACION", "REGULARISATION", "REGOLARIZZAZIONE", "REGULARIZACAO"}   # R5 answers UNIDENTIFIED lines (outside the 'rewrite only' contract): lead decides
 ROUND_EXCESS = (1.0, 2.0, 5.0, 10.0, 50.0, 100.0)   # TRAIN history: every round overpayment is one of these
 # review finding: R2 reverses deliberate policy readings of ar_match 'settle' (disputed remainder, no exception) and
@@ -179,6 +182,8 @@ def rewrite(bank, results, source, items, open0, pdf, stats=None):
                 arc_by_party[party[iid]].remove(k)
                 bump("R4")
                 continue
+    if ENABLE["R13"]:
+        _drop_closed(bank, results, source, open0, stats)
     if ENABLE["R9"]:
         _replaced_swap(bank, results, items, open0, pdf.get("repl") or {}, stats)
     if ENABLE["R5"]:
@@ -213,7 +218,8 @@ def _overpay(bank, results, source, items, open0, stats):
         if op.get(iid, 0.0) > 0.005:
             byp.setdefault(pid, []).append(iid)
     byp_all = {}
-    if ENABLE.get("R7"):
+    closed_by_party = {}   # R12: invoices already settled by an earlier bank line (our ledger), by party
+    if ENABLE.get("R7") or ENABLE.get("R11"):
         sub = items[typ.isin(["ARI", "ARC"])]
         for iid, pid in zip(sub.item_id, sub.party_id):
             if op.get(iid, 0.0) > 0.005:
@@ -231,6 +237,8 @@ def _overpay(bank, results, source, items, open0, stats):
                     op[iid] = op.get(iid, 0.0) - a
                 elif e != "DUPLICATE_PAYMENT":
                     op[iid] = 0.0
+                    if iid in typ.index and typ[iid] == "ARI":
+                        closed_by_party.setdefault(items.party_id[iid], []).append(iid)
             continue
         if t.amount <= 0 or rows[0].get("exception") != "UNIDENTIFIED":
             continue
@@ -258,6 +266,26 @@ def _overpay(bank, results, source, items, open0, stats):
                 x = t.amount - o
                 if o > 0.005 and cur[i] == t.currency and any(abs(x - v) < 0.005 for v in ROUND_EXCESS):
                     hits.append(i)
+        if not hits and ENABLE.get("R11") and len(cids) == 1:
+            rows11 = _wht_subset(next(iter(cids)), t, byp_all, op, typ, cur, items)
+            if rows11:
+                results[t.bank_txn_id] = rows11
+                source[t.bank_txn_id] = "exc_fix:wht"
+                for r in rows11:
+                    op[r["item_id"]] = 0.0
+                stats["R11"] = stats.get("R11", 0) + 1
+                continue
+        if not hits and ENABLE.get("R12") and len(cids) == 1:
+            cid = next(iter(cids))
+            same_open = [i for i in byp.get(cid, ()) if op.get(i, 0.0) > 0.005 and abs(op[i] - t.amount) <= 0.005]
+            dup = [i for i in closed_by_party.get(cid, ()) if cur[i] == t.currency
+                   and abs(float(items.total[i]) - t.amount) <= 0.005 and op.get(i, 0.0) <= 0.005]
+            if not same_open and len(dup) == 1:
+                results[t.bank_txn_id] = [{"item_id": dup[0], "amount": round(t.amount, 2), "category": "",
+                                           "exception": "DUPLICATE_PAYMENT"}]
+                source[t.bank_txn_id] = "exc_fix:dup"
+                stats["R12"] = stats.get("R12", 0) + 1
+                continue
         if len(hits) != 1 and ENABLE.get("R7") and len(cids) == 1:
             rows7 = _disc_subset(next(iter(cids)), t, byp_all, op, typ, cur, items)
             if rows7:
@@ -395,6 +423,57 @@ def _fx_rematch(bank, results, source, items, open0, stats):
         stats["R6"] = stats.get("R6", 0) + 1
 
 
+def _wht_subset(cid, t, byp_all, op, typ, cur, items, max_items=60, max_states=200000):
+    """R11: UNIDENTIFIED receipt of an identified MX/BR/MA payer = a UNIQUE set of its untouched open invoices, each net
+    of withholding at ONE rate (1.25 / 1.5 / 10 % of the total, rounded per invoice), credit notes netted in full."""
+    ctry = (items.attrs.get("cust_country") or {}).get(cid, "")
+    if ctry not in ("MX", "BR", "MA"):
+        return None
+    its = [i for i in byp_all.get(cid, ()) if cur[i] == t.currency and op.get(i, 0.0) > 0.005]
+    # zero-sum pairs (invoice + credit note of the same amount, e.g. cancelled-and-replaced) would make every subset
+    # ambiguous: leave such credit notes out
+    ari_amts = {round(op[i], 2) for i in its if typ[i] == "ARI"}
+    its = [i for i in its if typ[i] != "ARC" or round(op[i], 2) not in ari_amts]
+    if not its or len(its) > max_items:
+        return None
+    target = int(round(t.amount * 100))
+    found = []
+    for rate in WHT:
+        states = {0: (1, None)}
+        for i in its:
+            o = int(round(op[i] * 100))
+            if typ[i] == "ARC":
+                v = -o
+            else:
+                tot = float(items.total[i])
+                if abs(op[i] - tot) > 0.005:
+                    continue
+                v = o - int(round(round(tot * rate, 2) * 100))
+            new = dict(states)
+            for sm, (cnt, node) in states.items():
+                ns = sm + v
+                if ns > target:
+                    continue
+                c0 = new.get(ns)
+                new[ns] = (cnt, (i, node)) if c0 is None else (min(2, c0[0] + cnt), c0[1])
+            states = new
+            if len(states) > max_states:
+                return None
+        hit = states.get(target)
+        if hit:
+            found.append(hit)
+    if len(found) != 1 or found[0][0] != 1:
+        return None
+    rows, node = [], found[0][1]
+    while node:
+        i, node = node
+        rows.append({"item_id": i, "amount": round(op[i], 2), "category": "",
+                     "exception": "SHORT_WITHHOLDING" if typ[i] == "ARI" else ""})
+    if not any(r["exception"] for r in rows):
+        return None
+    return rows[::-1]
+
+
 def _disc_subset(cid, t, byp_all, op, typ, cur, items, max_items=60, max_states=400000):
     """R7: UNIDENTIFIED receipt of an identified payer = a UNIQUE combination of its open items (same currency) where
     each invoice is paid in full or at total - pct x total (discount terms), credit notes netted, and at least one
@@ -494,6 +573,27 @@ def _is_bank_charge(iid, ent_day, ccy, c, o, items):
     return True
 
 
+def _drop_closed(bank, results, source, open0, stats):
+    """R13: a v3 row (not DUPLICATE/RETURNED) on an item that was never open in our ledger (closed before the period
+    and not re-opened) cannot be a payment of it. Drop such rows; a receipt left without rows becomes UNIDENTIFIED."""
+    before, _ = replay(list(bank.bank_txn_id), results, open0)
+    amounts = dict(zip(bank.bank_txn_id, bank.amount))
+    for t in bank.bank_txn_id:
+        rows = results.get(t)
+        if not rows or not rows[0]["item_id"] or not source.get(t, "").startswith("v3"):
+            continue
+        keep = [r for r in rows if r["exception"] in ("DUPLICATE_PAYMENT", "RETURNED")
+                or r["item_id"] in open0 or before.get((t, r["item_id"]), 0.0) > 0.005]
+        if len(keep) == len(rows):
+            continue
+        stats["R13"] = stats.get("R13", 0) + 1
+        if not keep:
+            if amounts.get(t, 0) <= 0:
+                continue
+            keep = [{"item_id": "", "amount": "", "category": "UNIDENTIFIED", "exception": "UNIDENTIFIED"}]
+        results[t] = keep
+
+
 def _replaced_swap(bank, results, items, open0, repl, stats):
     """R9 (POLICIES §5.7): a row on an invoice that a PDF says was cancelled and replaced is moved to the replacement
     invoice, only when both have the same total and the replacement is not answered anywhere else."""
@@ -556,7 +656,7 @@ def run(ctx):
     if ENABLE["R5"]:
         ctx.items.attrs["customers"] = ctx.masters.get("customers")
         ctx.items.attrs["terms"] = _terms(ctx.masters.get("payment_terms"))
-    if ENABLE["R8"]:
+    if ENABLE["R8"] or ENABLE["R11"]:
         _attach_masters(ctx.items, ctx.masters)
     stats = rewrite(ctx.bank, ctx.results, ctx.source, ctx.items, opening(ctx), pdf)
     print(f"    exc_fix: {stats}")

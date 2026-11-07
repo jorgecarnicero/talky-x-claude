@@ -191,15 +191,25 @@ def load_items(root, phase):
             it.open = it.total
     else:
         prev = {"live": "train", "final": "live"}[phase]
-        cache = os.path.join(root, "solution", "cache", f"open_start_{phase}.pkl")
+        cache = os.path.join(root, "solution", "cache", f"open_start_{phase}_v2.pkl")
         oi = {r["item_id"]: r for r in rcsv(os.path.join(root, phase, "open_items_at_start.csv.gz"))}
         if os.path.exists(cache):
             with open(cache, "rb") as fh:
                 items.update(pickle.load(fh))
         else:
-            # enrich carried-over open items with full details from earlier phases
+            # enrich carried-over open items with full details from earlier phases, and keep the items of the last
+            # ~200 days that were already settled (open = 0) so that a second payment is seen as DUPLICATE_PAYMENT
+            start = {"live": "2025-07-01", "final": "2026-01-01"}[phase]
+            cut = (d(start) - timedelta(days=200)).isoformat()
+            oi_ids = set(oi)
+
+            def pred(r):
+                return r["item_id"] in oi_ids or r["issue_date"] >= cut
             for ph in (["train"] if prev == "train" else ["train", "live"]):
-                add_files(os.path.join(root, ph), only=set(oi))
+                add_files(os.path.join(root, ph), pred=pred)
+            for iid, it in items.items():
+                if iid not in oi_ids:
+                    it.open = 0
             os.makedirs(os.path.dirname(cache), exist_ok=True)
             with open(cache, "wb") as fh:
                 pickle.dump(dict(items), fh)
@@ -211,6 +221,9 @@ def load_items(root, phase):
                                        doc=r["document_number"], cur=r["currency"], total=cents(r["total_amount"]),
                                        issue=d(r["issue_date"]), due=d(r["due_date"]), terms="", po="", related="", pm="")
             it.open = cents(r["open_amount"])
+        for it in items.values():
+            if it.open is None:
+                it.open = 0
         n0 = len(items)
         add_files(os.path.join(root, phase))
         for it in items.values():

@@ -5,15 +5,32 @@ submitted. New work happens on the next `model/vN+1` branch and is merged into `
 Produce the file from that branch (`python solution/bankrec.py --phase live --out sub_live_vN.csv.gz`) and validate it
 (`python solution/tools/validate.py sub_live_vN.csv.gz --phase live`).
 
-Sample scores come from `starter/score_train.py <file> --sample`. They overestimate LIVE by about 3.5 points (sample
-recall is higher), so compare models on sample, but trust LIVE.
+**Compare models on dev** (held-out TRAIN months 2025-04 and 2025-05, see `docs/ROADMAP.md` block D). Dev is within
+~0.7 points of LIVE (v2: dev 77.73, LIVE 77.00), while sample overestimates by ~3.5. Only upload when dev clearly improves.
 
-| Model | Branch | Sample | LIVE | LIVE alloc F1 (P / R) | LIVE txn acc | LIVE exc F1 | Notes |
-|---|---|---|---|---|---|---|---|
-| starter | – | 11.28 | – | – | – | – | official naive baseline |
-| v1 | *(not saved: superseded in place)* | 79.27 | **75.81** | 83.0 % (98.0 / 71.9) | 82.9 % | 47.2 % | first cascade: batches, returns, remittances, refs, payer+amount, category model |
-| v2 | `model/v2` | 80.66 | *pending* | | | | + oldest-due subset search, FX in item currency, confirming = latest due on a business day, txt-advice fix |
-| v3 | `model/v3` | – | – | | | | work in progress |
+| Model | Branch | Sample | Dev | LIVE | LIVE alloc F1 (P / R) | LIVE txn acc | LIVE exc F1 | Notes |
+|---|---|---|---|---|---|---|---|---|
+| starter | – | 11.28 | – | – | – | – | – | official naive baseline |
+| v1 | *(not saved: superseded in place)* | 79.27 | – | **75.81** | 83.0 % (98.0 / 71.9) | 82.9 % | 47.2 % | first cascade: batches, returns, remittances, refs, payer+amount, category model |
+| v2 | `model/v2` | 80.66 | 77.73 | **77.00** | 84.7 % (97.8 / 74.6) | 83.6 % | 48.0 % | + oldest-due subset search, FX in item currency, confirming = latest due on a business day, txt-advice fix |
+| v3 | `model/v3` | 85.28 | 82.90 | *pending* | | | | block A + quick block B (see below) |
+
+### v3 changes (dev 77.73 → 82.90; alloc F1 85.8 → 86.6, txn acc 84.0 → 87.3, exception F1 48.2 → 67.1)
+
+- Duplicate payments: recently settled items are kept (open = 0); a payment of a settled item by reference or payer +
+  amount → `DUPLICATE_PAYMENT` (dev segment 0 → 80 %).
+- Returns: direct-debit returns use the batch id in the text and the receipt actually collected (59 → 96 %, and
+  re-presented transfers 59 → 89 %); returned cheques (65 → 92 %); card chargebacks; supplier transfers rejected by the
+  bank (0 → 89 %).
+- Wording → category: proforma → `CUSTOMER_ADVANCE` (0 → 100 %), refund of a duplicate → `CUSTOMER_REFUND` (46 → 97 %),
+  supplier refund of our duplicate → `SUPPLIER_REFUND`.
+- Supplier refunds of credit notes: incoming money from a supplier, or quoting the original invoice → the `APC` item
+  (35 → 98 %).
+- Service month: "MANT. MAYO 25" / "SERVICE APRIL 2025" picks the invoice issued the following month (56 → 88 %).
+- Guarantee retention (5 / 10 %) → `PARTIAL` with the cash; `SHORT_WITHHOLDING` only for MX01 / BR01 / MA01 (26 → 88 %).
+- Bank charges: also without a reference, non-SEPA detection via `XBCT`, "GASTOS SHA", foreign IBAN (18 → 78 %).
+- Overpayment only for a single invoice with ≤ 10.5 % excess.
+- A/B test: flagging every unmatched receipt `UNIDENTIFIED` beats "only when the payer is unknown" (81.65 vs 81.35).
 
 ## LIVE v1: weakest segments (accuracy per bank line)
 

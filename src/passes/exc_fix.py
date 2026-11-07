@@ -24,7 +24,11 @@ FULL = ("", "SHORT_DISCOUNT", "SHORT_BANK_CHARGES", "SHORT_WITHHOLDING", "FX_DIF
 ENABLE = {"R1": True, "R2": True, "R3": True, "R4": True,
           "R5": os.environ.get("EXC_R5", "0") == "1",
           "R6": os.environ.get("EXC_R6", "0") == "1",
-          "R7": os.environ.get("EXC_R7", "0") == "1"}   # R5 answers UNIDENTIFIED lines (outside the 'rewrite only' contract): lead decides
+          "R7": os.environ.get("EXC_R7", "0") == "1",
+          "R8": os.environ.get("EXC_R8", "1") == "1",
+          "R9": os.environ.get("EXC_R9", "1") == "1",
+          "R10": os.environ.get("EXC_R10", "1") == "1"}
+SETTLE_WORDS = {"SETTLEMENT", "REGULARIZACION", "REGULARISATION", "REGOLARIZZAZIONE", "REGULARIZACAO"}   # R5 answers UNIDENTIFIED lines (outside the 'rewrite only' contract): lead decides
 ROUND_EXCESS = (1.0, 2.0, 5.0, 10.0, 50.0, 100.0)   # TRAIN history: every round overpayment is one of these
 # review finding: R2 reverses deliberate policy readings of ar_match 'settle' (disputed remainder, no exception) and
 # ar_pdf instalments (out-of-order last instalment). EXC_R2_EXEMPT=1 skips R2 for those sources.
@@ -93,6 +97,15 @@ def rewrite(bank, results, source, items, open0, pdf, stats=None):
     def bump(k):
         stats[k] = stats.get(k, 0) + 1
 
+    ents = dict(zip(bank.bank_txn_id, zip(bank.entity, bank.booking_date)))
+    settle = set()
+    if ENABLE["R10"]:
+        from data import norm_words
+        cols = [c for c in ("text", "ref1", "ref2", "remittance_info") if c in bank.columns]
+        for row in zip(bank.bank_txn_id, *[bank[c] for c in cols]):
+            words = set(norm_words(" ".join(x for x in row[1:] if isinstance(x, str))).split())
+            if words & SETTLE_WORDS:
+                settle.add(row[0])
     for t, A, ccy in zip(bank.bank_txn_id, bank.amount, bank.currency):
         rows = results.get(t)
         if not rows or not rows[0]["item_id"] or A <= 0:
@@ -129,6 +142,17 @@ def rewrite(bank, results, source, items, open0, pdf, stats=None):
                 r["exception"], r["amount"] = "PARTIAL", round(c, 2)
                 bump("R3")
                 continue
+        # R10 settlement of a disputed remainder: never PARTIAL (TRAIN: 0 PARTIAL rows on settlement-word lines)
+        if t in settle:
+            if e == "PARTIAL":
+                r["exception"], r["amount"] = "", round(c, 2)
+                bump("R10")
+            continue
+        # R8 bank charges: cross-border receipt (payer country != entity country), shortfall <= 60 EUR and <= 2 %
+        if ENABLE["R8"] and e in ("PARTIAL", "") and c < o - 0.005 and _is_bank_charge(iid, ents[t], ccy, c, o, items):
+            r["exception"], r["amount"] = "SHORT_BANK_CHARGES", round(o, 2)
+            bump("R8")
+            continue
         # R2 consistency of PARTIAL / ''
         r2_exempt = R2_EXEMPT and (src == "ar:settle" or src.startswith("ar_pdf_"))
         if ENABLE["R2"] and not r2_exempt:
@@ -155,6 +179,8 @@ def rewrite(bank, results, source, items, open0, pdf, stats=None):
                 arc_by_party[party[iid]].remove(k)
                 bump("R4")
                 continue
+    if ENABLE["R9"]:
+        _replaced_swap(bank, results, items, open0, pdf.get("repl") or {}, stats)
     if ENABLE["R5"]:
         _overpay(bank, results, source, items, open0, stats)
     if ENABLE["R6"]:
@@ -430,6 +456,82 @@ def _disc_subset(cid, t, byp_all, op, typ, cur, items, max_items=60, max_states=
     return rows[::-1]
 
 
+def _fx_eur(amount, ccy, day, items):
+    """amount in ccy -> EUR at the last fx_rates fixing on/before day (None when unknown)."""
+    if ccy == "EUR":
+        return amount
+    fx = items.attrs.get("fx") or {}
+    ser = fx.get(ccy)
+    if not ser:
+        return None
+    import bisect
+    k = bisect.bisect_right(ser[0], day) - 1
+    if k < 0:
+        k = 0
+    return amount / ser[1][k]
+
+
+def _is_bank_charge(iid, ent_day, ccy, c, o, items):
+    """POLICIES §3 SHORT_BANK_CHARGES on a single invoice: cross-border payer (customer country != entity country),
+    shortfall <= 2 % of the item and <= 60 EUR equivalent, and not explained by a discount or withholding rate."""
+    ctry = items.attrs.get("cust_country") or {}
+    ecty = items.attrs.get("ent_country") or {}
+    ent, day = ent_day
+    pc = ctry.get(items.party_id[iid], "")
+    if not pc or not ecty.get(ent) or pc == ecty.get(ent):
+        return False
+    short = round(o - c, 2)
+    if short <= 0.005 or short > 0.02 * o + 0.005:
+        return False
+    eur = _fx_eur(short, ccy, day, items)
+    if eur is None or eur > 60.0 + 1e-6:
+        return False
+    tot = float(items.total[iid])
+    if abs(o - tot) < 0.005:
+        for r in WHT + (0.01, 0.02, 0.03):
+            if abs(short - round(tot * r, 2)) <= 0.011:
+                return False
+    return True
+
+
+def _replaced_swap(bank, results, items, open0, repl, stats):
+    """R9 (POLICIES §5.7): a row on an invoice that a PDF says was cancelled and replaced is moved to the replacement
+    invoice, only when both have the same total and the replacement is not answered anywhere else."""
+    if not repl:
+        return
+    used = {r["item_id"] for rows in results.values() for r in rows if r["item_id"]}
+    tot = items.total
+    for t in bank.bank_txn_id:
+        rows = results.get(t)
+        if not rows or not rows[0]["item_id"]:
+            continue
+        for r in rows:
+            old = r["item_id"]
+            new = repl.get(old)
+            if not new or not isinstance(new, str) or new == old or new in used or new not in tot.index \
+                    or old not in tot.index:
+                continue
+            if abs(float(tot[old]) - float(tot[new])) > 0.005 or open0.get(new, 0.0) <= 0.005:
+                continue
+            r["item_id"] = new
+            used.add(new)
+            stats["R9"] = stats.get("R9", 0) + 1
+
+
+def _attach_masters(items, masters):
+    cu = masters.get("customers")
+    en = masters.get("entities")
+    fx = masters.get("fx_rates")
+    items.attrs["cust_country"] = dict(zip(cu.customer_id, cu.country)) if cu is not None else {}
+    items.attrs["ent_country"] = dict(zip(en.entity, en.country)) if en is not None else {}
+    d = {}
+    if fx is not None:
+        f = fx.sort_values(["currency", "date"])
+        for c, g in f.groupby("currency"):
+            d[c] = (list(g.date), [float(x) for x in g.units_per_eur])
+    items.attrs["fx"] = d
+
+
 def _terms(pt):
     out = {}
     if pt is None:
@@ -446,12 +548,15 @@ def _terms(pt):
 def run(ctx):
     try:
         import pdfinfo as P
-        pdf = {"ret": P.retention(ctx), "cnmode": P.cn_mode(ctx), "rappel": P.rappel_mode(ctx)}
+        pdf = {"ret": P.retention(ctx), "cnmode": P.cn_mode(ctx), "rappel": P.rappel_mode(ctx),
+               "repl": P.replaced_by(ctx) if ENABLE["R9"] else {}}
     except Exception as ex:  # noqa: BLE001
         print(f"    exc_fix: no pdf info ({ex})")
         pdf = {}
     if ENABLE["R5"]:
         ctx.items.attrs["customers"] = ctx.masters.get("customers")
         ctx.items.attrs["terms"] = _terms(ctx.masters.get("payment_terms"))
+    if ENABLE["R8"]:
+        _attach_masters(ctx.items, ctx.masters)
     stats = rewrite(ctx.bank, ctx.results, ctx.source, ctx.items, opening(ctx), pdf)
     print(f"    exc_fix: {stats}")

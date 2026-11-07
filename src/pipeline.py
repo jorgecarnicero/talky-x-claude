@@ -18,7 +18,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from data import DEFAULT_DATA, Ctx  # noqa: E402
 
-PASS_ORDER = ["batches", "remittance", "ap_match", "nonitem", "ar_multi", "ar_pdf", "v3import", "ar_match", "ar_multi_late", "ar_bigpool", "v3rest", "exc_fix", "cancel_guard"]
+PASS_ORDER = ["batches", "remittance", "ap_match", "nonitem", "ar_multi", "ar_pdf", "v3import", "ar_match", "ar_multi_late", "ar_bigpool", "ar_dispute", "v3rest", "exc_fix", "cancel_guard"]
 
 
 def fallback(ctx):

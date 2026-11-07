@@ -96,6 +96,9 @@ def run_pipeline(d, run_dir, fresh):
 
 
 V35_PASSES = "batches,remittance,ap_match,nonitem,v3import,ar_match,v3rest"
+# v6a cascade (same chain + env as run_v6a.sh); used when the code under test ships run_v6a.sh
+V6A_PASSES = ("batches,remittance,ap_match,nonitem,ar_multi,ar_pdf,v3import,ar_match,ar_multi_late,v3rest,exc_fix,"
+              "cancel_guard")
 
 
 def run_v35(d, run_dir, fresh):
@@ -106,6 +109,9 @@ def run_v35(d, run_dir, fresh):
     if fresh:
         shutil.rmtree(cache, ignore_errors=True)
     env = {**os.environ, "PYTHONHASHSEED": "0", "BANKREC_DATA": d, "BANKREC_CACHE": cache}
+    passes = V35_PASSES
+    if os.path.exists(os.path.join(CODE, "run_v6a.sh")):
+        passes, env = V6A_PASSES, {**env, "EXC_R5": "1", "PAYER_DIR": "1"}
     py = sys.executable
     t0 = time.time()
     v3_sub, v3_why = os.path.join(run_dir, "sub_v3.csv.gz"), os.path.join(run_dir, "why_v3.csv")
@@ -115,7 +121,7 @@ def run_v35(d, run_dir, fresh):
             if not os.path.exists(os.path.join(cache, f"docs_{kind}_{ph}.parquet")):
                 steps.append([py, os.path.join(CODE, "src", "docs_extract.py"), "--data", d, "--phase", ph, "--only", kind])
     sub, src = os.path.join(run_dir, "sub.csv.gz"), os.path.join(run_dir, "sources.csv")
-    steps.append([py, os.path.join(CODE, "src", "pipeline.py"), "--data", d, "--phase", "live", "--passes", V35_PASSES,
+    steps.append([py, os.path.join(CODE, "src", "pipeline.py"), "--data", d, "--phase", "live", "--passes", passes,
                   "--sources", src, "--out", sub])
     for st in steps:
         e = {**env, "V3_SUB": v3_sub}

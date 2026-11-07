@@ -30,25 +30,41 @@ def _header(path):
         return next(csv.reader(fh), [])
 
 
-def check_masters_final(root, phase):
-    if phase != "final":
-        return
+def masters_report(root):
+    """-> list of (table, source, note): where each table of masters/ comes from in a FINAL run (file-by-file overlay)."""
     base, fin = os.path.join(root, "masters"), os.path.join(root, "final", "masters_final")
-    if not os.path.isdir(fin):
-        sys.exit(f"ERROR (final): {fin} is missing. Refusing to fall back to masters/ without notice.")
-    problems = []
+    rows = []
     for f in sorted(os.listdir(base)):
         if not f.endswith(".csv"):
             continue
         p = os.path.join(fin, f)
         if not os.path.exists(p):
-            problems.append(f"table {f} missing")
+            rows.append((f, "masters/", "not in masters_final: falls back to masters/"))
             continue
         miss = [c for c in _header(os.path.join(base, f)) if c not in _header(p)]
-        if miss:
-            problems.append(f"table {f} lacks columns {miss}")
-    if problems:
-        sys.exit("ERROR (final): masters_final does not match masters/: " + "; ".join(problems))
+        rows.append((f, "masters_final", f"lacks columns {miss} that masters/ has" if miss else "complete"))
+    return rows
+
+
+def check_masters_final(root, phase):
+    """FINAL: abort ONLY if final/masters_final/ is missing altogether. A partial masters_final is legitimate: print which
+    tables come from masters_final and which fall back to masters/ and continue. FINAL_STRICT_MASTERS=1: abort on any
+    missing table or column instead."""
+    if phase != "final":
+        return
+    fin = os.path.join(root, "final", "masters_final")
+    if not os.path.isdir(fin):
+        sys.exit(f"ERROR (final): {fin} is missing. Refusing to fall back to masters/ without notice.")
+    rows = masters_report(root)
+    w = max(len(r[0]) for r in rows) if rows else 10
+    print("masters for FINAL (final/masters_final overlays masters/ file by file):")
+    for t, src, note in rows:
+        print(f"   {t:<{w}}  {src:<14}  {note}")
+    bad = [r for r in rows if r[2] != "complete"]
+    if bad and os.environ.get("FINAL_STRICT_MASTERS") == "1":
+        sys.exit("ERROR (final, FINAL_STRICT_MASTERS=1): masters_final is not complete: " + "; ".join(f"{t}: {n}" for t, _, n in bad))
+    if bad:
+        print(f"NOTE: {len(bad)} table(s) are not complete in masters_final (see above); continuing (set FINAL_STRICT_MASTERS=1 to abort).")
 
 
 def check_all(root, phase):

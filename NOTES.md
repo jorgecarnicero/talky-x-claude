@@ -41,3 +41,12 @@ Reproduce: `./run_v35.sh live` (runs team v3, docs extraction, our pipeline, val
 Tune window 2024-10..11 gains per agent: ar_pdf +0.15, exc_fix +0.15 (+0.33 R5), ar_multi +0.12, ar_match rules +0.02.
 Remaining biggest bucket: ~1,360 receipts per 2 months left UNIDENTIFIED though golden has items (payer known for ~500, no amount combo found).
 | 13:48 | tune 2024-10..11: v4 (R5+payer_dir) 94.00 vs v3.5 93.26 (+0.74, same gain as held-out +0.74); R2 exemption for settle/ar_pdf: 94.00 (no effect, kept off) | 94.00 | 93.57 | pending |
+
+## v6 series — held-out 2025-04..05 / LIVE
+| version | held-out | LIVE |
+|---|---|---|
+| v4 (+R5, payer_dir) | 93.57 | 92.67 |
+| v6a = v4 + ar_match nm_fraction (n-to-m) | 93.69 | 92.81 |
+| v6b = v6a + ar_bigpool + exc_fix R5 v2 + dust | 94.20 | 93.31 |
+| v6c = v6b + multi round 3 (AR_CNREL, AR_ZREF, MULTI_FX) | 94.36 | pending |
+Local->LIVE gap stable at 0.86–0.90 for every version since v3.5.

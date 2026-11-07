@@ -3,6 +3,7 @@ import os
 
 See POLICIES §3, §5. No labels used. Order: lines are processed chronologically (ledger FIFO).
 """
+import os
 import re
 from collections import defaultdict
 from datetime import date as _date, timedelta
@@ -23,6 +24,11 @@ DP_MAX_POOL = 80
 FRACTIONS = (0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 0.95)
 STRICT_WEAK = True
 STRICT_GAP = 0.3
+NM_FRACTIONS = (0.4, 0.5, 0.6)   # n-to-m: one invoice of a multi-invoice transfer paid at a clean fraction
+NM_ON = os.environ.get("AR_NM", "1") == "1"
+NM_MAX_POOL = 40
+NM_COST = 3e10
+NM_MAX_ITEMS = 4   # without references: chance exact-cent combinations grow fast with the set size
 SETTLE_WORDS = {"SETTLEMENT", "REGULARIZACION", "REGULARISATION", "REGOLARIZZAZIONE", "REGULARIZACAO"}
 INST_RE = re.compile(r"(?<![\d/])(\d{1,2})\s?/\s?(\d{1,2})(?![\d/])")
 
@@ -489,6 +495,12 @@ class Matcher:
             r = self.fraction_partial(O, R, A, tol, fx, bdate)
             if r:
                 return r
+        # --- 4c. n-to-m: open balances in full (remainders at their open amount) + ONE untouched invoice at a clean
+        # fraction of its total (PARTIAL). Referenced items mandatory when present; the solution must be unique.
+        if NM_ON and evid >= 1.5 and tol <= 0.0051 and len(O) >= 2:
+            r = self.nm_fraction(O, R, refs, A, fx, bdate)
+            if r:
+                return r
         # --- 5. single referenced invoice: partial / overpayment
         Ri = [i for i in R if it[i][0] == "ARI"]
         if len(Ri) == 1 and evid >= 1.5:
@@ -552,6 +564,91 @@ class Matcher:
                     if abs(round(tot / n, 2) - A) <= tl:
                         return self.rows_for([i], A, fx, {i: "PARTIAL"}, {i: A}), "inst_ref"
         return None
+
+    def nm_fraction(self, O, R, refs, A, fx, bdate):
+        it = self.ix.item
+        lo = (_d(bdate) - timedelta(days=400)).isoformat()
+        hi = (_d(bdate) + timedelta(days=20)).isoformat()
+        T = cents(A)
+        pool = [i for i in O if it[i][0] == "ARI" and self.sv(i) > 0.005 and not self.attach.get(i)
+                and ((it[i][4] >= lo and it[i][5] <= hi) or refs.get(i))]
+        if len(pool) < 2:
+            return None
+        if len(pool) > NM_MAX_POOL:
+            pref = [i for i in pool if refs.get(i)]
+            if not pref:
+                return None
+            rest = sorted((i for i in pool if not refs.get(i)), key=lambda i: (it[i][5], it[i][4]))
+            pool = pref + rest[:max(0, NM_MAX_POOL - len(pref))]
+        val = {i: cents(self.sv(i)) for i in pool}
+        if len(pool) * T > 4e8:
+            return None
+        fr0 = sum(1 for i in pool if abs(self.open[i] - it[i][7]) < 0.005)
+        if 3 * fr0 * len(pool) * T > NM_COST:
+            self.stats["nm_cost"] += 1
+            return None
+        Rset = [i for i in R if i in val]
+        fr = [i for i in pool if abs(self.open[i] - it[i][7]) < 0.005]   # untouched invoices
+        for mand in ((Rset, "nm_ref"), ([], "nm")) if Rset else (([], "nm"),):
+            mand, kind = mand
+            sols = []
+            for p in fr:
+                tot = cents(it[p][7])
+                for f in NM_FRACTIONS:
+                    part = int(round(tot * f))
+                    m_ = [i for i in mand if i != p]
+                    tgt = T - part - sum(val[i] for i in m_)
+                    if tgt < 0:
+                        continue
+                    rest = [i for i in pool if i != p and i not in m_]
+                    if tgt == 0:
+                        sub = []
+                    else:
+                        sub = self._dp_one(rest, val, tgt)
+                        if sub is None:
+                            continue
+                    if not m_ and not sub:
+                        continue
+                    sols.append((p, part, m_ + sub, rest, tgt))
+                    if len(sols) > 1:
+                        break
+                if len(sols) > 1:
+                    break
+            if len(sols) == 1:
+                p, part, sel, rest, tgt = sols[0]
+                if kind == "nm" and len(sel) + 1 > NM_MAX_ITEMS:
+                    self.stats["nm_big"] += 1
+                    return None
+                # uniqueness of the subset: no solution may avoid any selected (non-mandatory) item
+                free = [i for i in sel if i not in mand]
+                for q in free:
+                    if self._dp_one([i for i in rest if i != q], val, tgt) is not None:
+                        return None
+                sel = sorted(sel, key=lambda i: (it[i][4], it[i][3]))
+                return self.rows_for(sel + [p], A, fx, {p: "PARTIAL"}, {p: part / 100.0}), kind
+            if sols:
+                return None
+        return None
+
+    def _dp_one(self, items, val, tgt):
+        """One exact subset (bitset DP) of items with integer values val summing to tgt, or None."""
+        if tgt <= 0:
+            return [] if tgt == 0 else None
+        mask = (1 << (tgt + 1)) - 1
+        reach = [1]
+        r = 1
+        for i in items:
+            r = (r | (r << val[i])) & mask
+            reach.append(r)
+        if not (r >> tgt) & 1:
+            return None
+        sel, cur = [], tgt
+        for k in range(len(items), 0, -1):
+            if (reach[k - 1] >> cur) & 1:
+                continue
+            sel.append(items[k - 1])
+            cur -= val[items[k - 1]]
+        return sel if cur == 0 else None
 
     def fraction_partial(self, O, R, A, tol, fx, bdate):
         it = self.ix.item

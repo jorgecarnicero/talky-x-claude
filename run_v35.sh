@@ -9,5 +9,5 @@ OUT=../out; mkdir -p $OUT
 echo "== 1/4 v3 (team code)"; (cd ../team-main && python3 solution/bankrec.py --phase $PHASE --out ../out/sub_${PHASE}_v3.csv.gz)
 echo "== 2/4 docs extraction"; .venv/bin/python src/docs_extract.py --phase $PHASE
 echo "== 3/4 v3.5 pipeline"; V3_SUB=$OUT/sub_${PHASE}_v3.csv.gz .venv/bin/python src/pipeline.py --phase $PHASE \
-  --passes batches,remittance,ap_match,nonitem,v3import,ar_match,v3rest --out $OUT/sub_${PHASE}_v35.csv.gz --sources $OUT/${PHASE}_v35_src.csv
+  --passes batches,remittance,ap_match,nonitem,v3import,ar_match,ar_payer,v3rest --out $OUT/sub_${PHASE}_v35.csv.gz --sources $OUT/${PHASE}_v35_src.csv
 echo "== 4/4 validate"; .venv/bin/python src/validate_submission.py $OUT/sub_${PHASE}_v35.csv.gz --phase $PHASE

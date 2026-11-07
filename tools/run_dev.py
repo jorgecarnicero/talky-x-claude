@@ -36,15 +36,31 @@ def run(cmd, env):
                         ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
                         ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
                         ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
-        h = ctypes.windll.kernel32.OpenProcess(0x0400 | 0x0010, False, p.pid)
+        def tree(pid):
+            """pids of the process and its descendants (a venv python.exe is a launcher for the real interpreter)"""
+            out = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                  "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ParentProcessId) $($_.ProcessId)\" }"],
+                                 capture_output=True, text=True).stdout.split()
+            pairs = [(int(out[i]), int(out[i + 1])) for i in range(0, len(out) - 1, 2)
+                     if out[i].isdigit() and out[i + 1].isdigit()]
+            res, todo = {pid}, [pid]
+            while todo:
+                x = todo.pop()
+                for par, ch in pairs:
+                    if par == x and ch not in res:
+                        res.add(ch)
+                        todo.append(ch)
+            return res
         while p.poll() is None:
-            time.sleep(1)
-            c = PMC()
-            c.cb = ctypes.sizeof(PMC)
-            if h and ctypes.windll.psapi.GetProcessMemoryInfo(h, ctypes.byref(c), c.cb):
-                peak = max(peak or 0, c.PeakWorkingSetSize)
-        if h:
-            ctypes.windll.kernel32.CloseHandle(h)
+            time.sleep(5)
+            for pid in tree(p.pid):
+                h = ctypes.windll.kernel32.OpenProcess(0x0400 | 0x0010, False, pid)
+                c = PMC()
+                c.cb = ctypes.sizeof(PMC)
+                if h and ctypes.windll.psapi.GetProcessMemoryInfo(h, ctypes.byref(c), c.cb):
+                    peak = max(peak or 0, c.PeakWorkingSetSize)
+                if h:
+                    ctypes.windll.kernel32.CloseHandle(h)
     else:
         p.wait()
         import resource

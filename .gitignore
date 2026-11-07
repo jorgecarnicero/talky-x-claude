@@ -29,6 +29,12 @@ __pycache__/
 # macOS metadata from the extracted archives
 ._*
 .DS_Store
+Hackathon*/
+data*/
+dev_runs/
+solution/cache/
+*.csv.gz
+*.zip
 
 # v3.5 python env
 /.venv/

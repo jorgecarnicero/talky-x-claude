@@ -13,6 +13,7 @@ Passes (each bank line is resolved by the first pass that claims it):
 Standard library only (+ `pdftotext` on PATH for PDF advices).
 """
 import argparse
+import bisect
 import csv
 import gzip
 import io
@@ -21,6 +22,7 @@ import math
 import os
 import pickle
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -150,6 +152,26 @@ class Item:
             setattr(self, s, k.get(s))
 
 
+_SPAN = {}
+
+
+def phase_span(root, phase, default):
+    """(first, last) booking date of the phase's bank lines (live / final), read from the data itself so that the
+    calendar is not hard-coded (default = the official calendar, used when the file is absent)."""
+    key = (root, phase)
+    if key not in _SPAN:
+        lo = hi = None
+        try:
+            for r in rcsv(os.path.join(root, phase, "bank_transactions.csv.gz")):
+                b = r["booking_date"]
+                lo = b if lo is None or b < lo else lo
+                hi = b if hi is None or b > hi else hi
+        except OSError:
+            pass
+        _SPAN[key] = (lo, hi) if lo else default
+    return _SPAN[key]
+
+
 def load_items(root, phase):
     """Return dict item_id -> Item with open amounts at phase start."""
     items = {}
@@ -199,7 +221,7 @@ def load_items(root, phase):
         else:
             # enrich carried-over open items with full details from earlier phases, and keep the items of the last
             # ~200 days that were already settled (open = 0) so that a second payment is seen as DUPLICATE_PAYMENT
-            start = {"live": "2025-07-01", "final": "2026-01-01"}[phase]
+            start = phase_span(root, phase, ({"live": "2025-07-01", "final": "2026-01-01"}[phase], None))[0]
             cut = (d(start) - timedelta(days=200)).isoformat()
             oi_ids = set(oi)
 
@@ -350,6 +372,7 @@ class Rec:
         self.customers = {r["customer_id"]: r for r in rcsv(os.path.join(m, "customers.csv"))}
         self.suppliers = {r["supplier_id"]: r for r in rcsv(os.path.join(m, "suppliers.csv"))}
         self.fx = defaultdict(dict)
+        self._fx_days = {}
         for r in rcsv(os.path.join(m, "fx_rates.csv")):
             self.fx[r["currency"]][r["date"]] = float(r["units_per_eur"])
         self.party_by_iban = defaultdict(set)
@@ -398,11 +421,14 @@ class Rec:
         tab = self.fx.get(cur)
         if not tab:
             return None
-        for i in range(10):
-            k = (day - timedelta(days=i)).isoformat()
-            if k in tab:
-                return tab[k]
-        return None
+        k = day.isoformat()
+        if k in tab:
+            return tab[k]
+        ds = self._fx_days.get(cur)
+        if ds is None:
+            ds = self._fx_days[cur] = sorted(tab)
+        i = bisect.bisect_right(ds, k) - 1          # last rate on or before the day; none before -> first after
+        return tab[ds[i if i >= 0 else 0]]
 
     def convert(self, amt, from_cur, to_cur, day):
         a, b = self.fx_rate(from_cur, day), self.fx_rate(to_cur, day)
@@ -516,6 +542,10 @@ class Rec:
 
     def month_window(self, before=3, after=1):
         lo, hi = (DEV_MONTHS[0], DEV_MONTHS[-1]) if self.phase == "dev" else self.PHASE_RANGE[self.phase]
+        if self.phase in ("live", "final"):
+            a, b = phase_span(self.root, self.phase, (None, None))
+            if a:
+                lo, hi = a[:7].replace("-", ""), b[:7].replace("-", "")
 
         def shift(ym, k):
             y, m = int(ym[:4]), int(ym[4:]) + k
@@ -951,7 +981,12 @@ class Rec:
             with open(cache_p, "rb") as fh:
                 cache = pickle.load(fh)
         ras, dirty = [], False
+        have_pdf = shutil.which("pdftotext") is not None
+        if not have_pdf:
+            log("WARNING: pdftotext not found on PATH -> PDF remittance advices are skipped")
         for f, rel in self.aux_files_any("remittance_advices"):
+            if rel.lower().endswith(".pdf") and not have_pdf:
+                continue  # do not cache a missing parser as "unparseable"
             if rel not in cache:
                 try:
                     cache[rel] = parse_remittance(f)
@@ -1465,9 +1500,13 @@ def parse_remittance(path):
     if ext == "xlsx":
         return parse_ra_rows(xlsx_rows(path))
     if ext == "pdf":
-        txt = subprocess.run(["pdftotext", "-raw", "-enc", "UTF-8", path, "-"], capture_output=True).stdout.decode(
-            "utf-8", "replace")
-        return parse_ra_text(txt)
+        try:
+            pr = subprocess.run(["pdftotext", "-raw", "-enc", "UTF-8", path, "-"], capture_output=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):  # pdftotext missing or hung: skip this parser
+            return None
+        if pr.returncode != 0:
+            return None
+        return parse_ra_text(pr.stdout.decode("utf-8", "replace"))
     if ext == "txt":
         return parse_ra_text(open(path, encoding="utf-8", errors="replace").read())
     return None
@@ -1667,6 +1706,17 @@ class CatModel:
 
 
 # ----------------------------------------------------------------------------- main
+def _guards(root, phase):
+    """live/final: abort without pdftotext or with an incomplete masters_final (src/guards.py; never changes an answer)."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+    try:
+        import guards
+    except ImportError:
+        log("WARNING: src/guards.py not found: pdftotext / masters_final checks skipped")
+        return
+    guards.check_all(root, phase)
+
+
 def main():
     global DEV_MONTHS
     ap = argparse.ArgumentParser()
@@ -1677,6 +1727,7 @@ def main():
     ap.add_argument("--why", default=None, help="optional csv with the matcher used per line (for debugging)")
     a = ap.parse_args()
     root = os.path.abspath(a.data)
+    _guards(root, a.phase)
     out = a.out or f"sub_{a.phase}.csv.gz"
     DEV_MONTHS = sorted(a.months.split(","))
 

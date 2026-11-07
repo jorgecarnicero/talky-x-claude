@@ -505,6 +505,8 @@ def main():
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--force", action="store_true", help="re-extract even if the cache exists (train/live only skip)")
     a = ap.parse_args()
+    import guards
+    guards.check_all(a.data, a.phase)
     os.makedirs(CACHE, exist_ok=True)
     for kind, fn in (("ra", run_ra), ("pdf", run_pdf)):
         if a.only not in (None, kind):

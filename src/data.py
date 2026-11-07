@@ -195,7 +195,7 @@ class Ctx:
             oi = _read(os.path.join(self.phase_dir, "open_items_at_start.csv.gz"))
             op = dict(zip(oi.item_id, oi.open_amount.astype(float)))
             start = self.bank.booking_date.min()
-            new = it[it.issue_date >= {"live": "2025-07-01", "final": "2026-01-01"}[self.phase]]
+            new = it[it.issue_date >= start]  # phase start = first bank line (2025-07-01 LIVE, 2026-01-01 FINAL)
             op.update(zip(new.item_id, new.total))
             return op
         op = dict(zip(it.item_id, it.total))

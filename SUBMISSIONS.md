@@ -13,7 +13,8 @@ Produce the file from that branch (`python solution/bankrec.py --phase live --ou
 | starter | – | 11.28 | – | – | – | – | – | official naive baseline |
 | v1 | *(not saved: superseded in place)* | 79.27 | – | **75.81** | 83.0 % (98.0 / 71.9) | 82.9 % | 47.2 % | first cascade: batches, returns, remittances, refs, payer+amount, category model |
 | v2 | `model/v2` | 80.66 | 77.73 | **77.00** | 84.7 % (97.8 / 74.6) | 83.6 % | 48.0 % | + oldest-due subset search, FX in item currency, confirming = latest due on a business day, txt-advice fix |
-| v3 | `model/v3` | 85.28 | 82.90 | *pending* | | | | block A + quick block B (see below) |
+| v3 | `model/v3` | 85.28 | 82.90 | **82.25** | 85.4 % (98.3 / 75.4) | 87.4 % | 66.8 % | block A + quick block B (see below) |
+| v4 | `model/v4-pdfs` | – | – | – | | | | work in progress: document PDFs (block C) |
 
 ### v3 changes (dev 77.73 → 82.90; alloc F1 85.8 → 86.6, txn acc 84.0 → 87.3, exception F1 48.2 → 67.1)
 

@@ -29,3 +29,6 @@ __pycache__/
 # macOS metadata from the extracted archives
 ._*
 .DS_Store
+
+# v3.5 python env
+/.venv/

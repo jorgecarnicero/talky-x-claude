@@ -1,3 +1,4 @@
+import os
 """AR receipts by transfer: identify the payer, parse references, explain the amount over the customer's open items.
 
 See POLICIES §3, §5. No labels used. Order: lines are processed chronologically (ledger FIFO).
@@ -41,6 +42,9 @@ class Matcher:
     def __init__(self, ctx):
         self.ctx = ctx
         self.ix = ARIndex(ctx)
+        if os.environ.get("PAYER_DIR", "0") == "1":
+            import payer_dir
+            payer_dir.apply(ctx, self.ix)
         self.open = ctx.open
         self.acct_ccy = dict(zip(ctx.masters["bank_accounts"].account_id, ctx.masters["bank_accounts"].currency))
         self.stats = defaultdict(int)

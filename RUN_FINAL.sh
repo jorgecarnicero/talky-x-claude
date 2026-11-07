@@ -9,6 +9,7 @@
 # Takes ~20-25 min. Close other heavy apps first. Never run two copies at once.
 # Also works for a dry run on LIVE:   bash RUN_FINAL.sh --live
 set -euo pipefail
+if [ "${FORCE_ARYAN_RUNNER:-}" != "1" ]; then echo "usa solution/run_final.sh"; exit 1; fi
 P=~/Downloads/hackathons/claude-talky-accounting
 cd "$P"
 PASSES=batches,remittance,ap_match,nonitem,ar_multi,ar_pdf,v3import,ar_match,ar_multi_late,ar_bigpool,v3rest,exc_fix,cancel_guard

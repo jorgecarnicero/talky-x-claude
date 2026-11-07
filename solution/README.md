@@ -32,6 +32,30 @@ python solution/tools/diagnose.py sub_dev.csv.gz why_dev.csv ar_ref_noise,ar_ins
 
 Quick smoke test: `--phase sample` + `python starter/score_train.py sub_sample.csv.gz --sample` (~15 s).
 
+## LIVE simulation on TRAIN (preferred way to iterate; no submissions spent)
+
+`solution/tools/dev.py` builds a LIVE-shaped dataset out of TRAIN (outside the repo, in `~/hackdata/data_dev`) and runs the
+**unchanged** pipeline on it with `--phase live`, then scores it with the official scorer. Needs DuckDB only to build
+the dataset (`pip install duckdb`) and `pdftotext` on PATH (without it PDF advices are skipped and the score is not comparable).
+
+```
+python solution/tools/dev.py --name my-idea            # window 2025-04-01..2025-05-31, ~2 min; writes dev_runs/my-idea/
+python solution/tools/dev.py --name v3 --src /path/to/data     # --src: folder with train/ and masters/ (default ~/hackdata/data)
+python solution/tools/compare.py v3 my-idea            # ACCEPT iff score up and no >90 % segment drops > 0.5 pts
+python solution/tools/dev.py --start 2025-04-01 --end 2025-05-31 --out ~/hackdata/data_dev_mine --name my-idea   # own dataset dir: parallel runs do not clash
+python solution/tools/dev.py --sealed --name final-check   # sealed window 2025-01-01..2025-02-28: use sparingly
+python solution/tools/dev_acceptance.py                # harness self-tests (oracle = 100, all-UNIDENTIFIED, leak, opening table, determinism)
+```
+
+`dev_runs/<name>/`: `report.md`, `result.json`, `segments.csv`, `classes.csv` (per exception class: predicted rows, golden rows,
+precision / recall / F1, "(n pequeño)" if < 50 cases), `failures_<segment>.csv` (every wrong bank line: text, golden, prediction,
+which matcher produced it). Exception classes with < 100 golden rows are flagged as unreliable. The dataset layout is documented in `make_dev_dataset.py`; do not use the `segment` column in rules.
+
+**Reproducibility: pin `PYTHONHASHSEED`.** The matcher iterates over sets, so its output depends on Python's hash order (on the
+dev window 84.26 vs 83.16 between two seeds). `dev.py` runs it with `PYTHONHASHSEED=0`; do the same for LIVE and **FINAL**
+(`PYTHONHASHSEED=0 python solution/bankrec.py --phase final ...`) so that the file you validate is the file you upload, and
+re-runs are identical.
+
 ## Submit
 
 ```

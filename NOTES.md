@@ -17,3 +17,10 @@
   it is an exact standard cut (3/5/10/20/30 %), else PARTIAL. Unverifiable on labels — revisit if LIVE looks off.
 - PDF clause extraction: 100 % parsed train/live, <1 min per phase; clauses present on ~100 % of instalment/retention/
   advance/replaced items (pdfinfo.py API for the AR matcher).
+| 12:50 | batches+remittance+nonitem+ap_match, window 2025-04..05 (team v3's dev window) | – | 65.17 | – |
+| 12:50 | team v3 (main) same window | – | 82.83 | 82.25 |
+| 12:55 | HYBRID: my lines with items (batches/remittance/ap_match) + v3 for the rest | – | **87.65** | – |
+
+- Mine beats v3 on: ap_payment_multi/single (96->100 %), ap_direct_debit (88->100), cheques (83->100), dd_batch (84->99),
+  ap_fx (81->99), ap_factored, dd_returned, supplier refunds, cn netted. ~1,234 more correct lines in the window.
+- Window 2025-04..05 was never used for tuning by any agent (they tuned on 2024H2) -> fair out-of-sample comparison.

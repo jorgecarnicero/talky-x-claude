@@ -31,9 +31,10 @@ def main():
     ap.add_argument("why")
     ap.add_argument("segments", help="comma separated segment names (see golden_allocations 'segment')")
     ap.add_argument("--phase", default="sample", choices=["sample", "train", "dev"])
+    ap.add_argument("--months", default="202504,202505", help="dev window (same as bankrec.py --months)")
     ap.add_argument("--n", type=int, default=4)
     a = ap.parse_args()
-    D = "solution/cache/dev_202504_202505/" if a.phase == "dev" else a.phase + "/"
+    D = "solution/cache/dev_" + "_".join(sorted(a.months.split(","))) + "/" if a.phase == "dev" else a.phase + "/"
     bt = {r["bank_txn_id"]: r for r in rd(D + "bank_transactions.csv.gz")}
     why = {r["bank_txn_id"]: r["why"] for r in rd(a.why)}
     S, G, seg = defaultdict(list), defaultdict(list), {}

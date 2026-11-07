@@ -160,7 +160,7 @@ class Item:
     __slots__ = ("id", "typ", "side", "entity", "party", "name", "doc", "cur", "total", "open", "issue", "due", "terms",
                  "po", "related", "pm", "paid_by",
                  # from the document PDF (solution/pdfs.py)
-                 "plan", "payable", "adv_net", "smonth", "cn_mode", "cancelled", "replaced_by")
+                 "plan", "payable", "adv_net", "smonth", "cn_mode", "cancelled", "replaced_by", "factor")
 
     def __init__(self, **k):
         for s in self.__slots__:
@@ -460,6 +460,9 @@ class Rec:
             if "rebate" in cl:
                 it.cn_mode = cl["rebate"]["mode"]
                 n["rebate_" + it.cn_mode] += 1
+            if "factor" in cl:
+                it.factor = cl["factor"]
+                n["factor"] += 1
             if "cn_mode" in cl:
                 it.cn_mode = cl["cn_mode"]
                 n["apc_" + it.cn_mode] += 1
@@ -844,6 +847,14 @@ class Rec:
             return (c[0], a, "")
         return None
 
+    def prefer_factor(self, its, payee_text):
+        """invoices assigned to a factor (PDF clause) are paid to the factor: keep those whose factor is the payee"""
+        pt = set(name_tokens(payee_text))
+        if not pt:
+            return None
+        hit = [i for i in its if i.factor and set(name_tokens(i.factor)) <= pt]
+        return hit or None
+
     def run_items(self, rows):
         out = []
         for r in rows:
@@ -853,6 +864,8 @@ class Rec:
             da = abs(cents(r["document_amount"]))
             if len(its) > 1:
                 its = [i for i in its if i.total == da or i.open == da] or its
+            if len(its) > 1:
+                its = self.prefer_factor(its, r["beneficiary"]) or its
             if len(its) > 1 and sup:
                 its = [i for i in its if i.party in sup] or its
             if len(its) > 1:
@@ -1212,6 +1225,8 @@ class Rec:
                 refs += [i for i in self.ref_candidates(t, "AR") if i.typ == "ARC"]
             if not refs:
                 continue
+            if amt < 0 and len({i.party for i in refs}) > 1:
+                refs = self.prefer_factor(refs, " ".join([t["text"], t["counterparty_name"]])) or refs
             r = self.match_amount(t, refs, amt)
             if not r and not any(i.open > 0 for i in refs if i.typ in ("ARI", "API")):
                 r = self.dup_check(t, refs, amt)
@@ -1324,6 +1339,11 @@ class Rec:
 
         # 1. single exact (several same-amount invoices: the service month named in the text, else oldest)
         exact = [c for c in cands if c.typ in ("ARI", "API") and eq(c, c.open, tgt(c))]
+        kn0 = instalment_k_of_n(" ".join([t["text"], t["remittance_info"], t["ref2"]]))
+        if exact and kn0 and kn0[0] < kn0[1]:
+            inst = [c for c in exact if c.typ == "ARI" and (c.plan or abs(tgt(c) - int(round(c.total / kn0[1]))) <= kn0[1] + 1)]
+            if inst:
+                return [(inst[0], tgt(inst[0]), "PARTIAL")], "instalment_text"
         if exact:
             if len(exact) > 1:
                 sm = service_month(" ".join([t["text"], t["remittance_info"], t["ref2"]]), bday)

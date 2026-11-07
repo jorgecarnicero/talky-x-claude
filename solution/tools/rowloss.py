@@ -12,6 +12,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("submission")
     ap.add_argument("--phase", default="sample", choices=["sample", "train", "dev"])
+    ap.add_argument("--months", default="202504,202505", help="dev window (same as bankrec.py --months)")
     ap.add_argument("--top", type=int, default=20)
     a = ap.parse_args()
     sub = {}
@@ -19,7 +20,7 @@ def main():
         if r["item_id"]:
             sub[(r["bank_txn_id"], r["item_id"])] = float(r["amount"])
     tot, tp, gold = Counter(), Counter(), set()
-    for r in csv.DictReader(gzip.open(("solution/cache/dev_202504_202505" if a.phase == "dev" else a.phase) + "/golden_allocations.csv.gz", "rt", encoding="utf-8")):
+    for r in csv.DictReader(gzip.open(("solution/cache/dev_" + "_".join(sorted(a.months.split(","))) if a.phase == "dev" else a.phase) + "/golden_allocations.csv.gz", "rt", encoding="utf-8")):
         if not r["item_id"]:
             continue
         k = (r["bank_txn_id"], r["item_id"])

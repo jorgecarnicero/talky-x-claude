@@ -365,15 +365,19 @@ class Rec:
 
     def _load_masters(self):
         m = os.path.join(self.root, "masters")
-        if self.phase == "final" and os.path.isdir(os.path.join(self.root, "final", "masters_final")):
-            m = os.path.join(self.root, "final", "masters_final")
-        self.accounts = {r["account_id"]: r for r in rcsv(os.path.join(m, "bank_accounts.csv"))}
-        self.terms = {r["code"]: r for r in rcsv(os.path.join(m, "payment_terms.csv"))}
-        self.customers = {r["customer_id"]: r for r in rcsv(os.path.join(m, "customers.csv"))}
-        self.suppliers = {r["supplier_id"]: r for r in rcsv(os.path.join(m, "suppliers.csv"))}
+        fin = os.path.join(self.root, "final", "masters_final")
+        use_final = self.phase == "final" and os.path.isdir(fin)
+
+        def mp(name):  # masters_final overlays masters/ file by file (a partial masters_final is legitimate)
+            p = os.path.join(fin, name)
+            return p if use_final and os.path.exists(p) else os.path.join(m, name)
+        self.accounts = {r["account_id"]: r for r in rcsv(mp("bank_accounts.csv"))}
+        self.terms = {r["code"]: r for r in rcsv(mp("payment_terms.csv"))}
+        self.customers = {r["customer_id"]: r for r in rcsv(mp("customers.csv"))}
+        self.suppliers = {r["supplier_id"]: r for r in rcsv(mp("suppliers.csv"))}
         self.fx = defaultdict(dict)
         self._fx_days = {}
-        for r in rcsv(os.path.join(m, "fx_rates.csv")):
+        for r in rcsv(mp("fx_rates.csv")):
             self.fx[r["currency"]][r["date"]] = float(r["units_per_eur"])
         self.party_by_iban = defaultdict(set)
         self.party_by_mandate = {}

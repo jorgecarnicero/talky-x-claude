@@ -56,6 +56,7 @@ def write(out_dir, info, base_dir, cand_dir, data_dir, base, cand, label, why, d
     L += ["", f"- ventana: {info['window']}{' (SELLADA)' if info['sealed'] else ''}; minutos del candidato: {info['minutes']:.1f}",
           f"- rama: `{info['rama']}` commit `{info['commit']}`; integracion `{info['integration']}` commit `{info['integration_commit'][:10]}`",
           f"- codigo probado (arbol de la fusion): `{info['tree']}`; baseline: arbol `{info['base_tree']}` (`{os.path.basename(base_dir)}`)",
+          f"- clave de salida (solo ficheros que afectan a la salida + datos): candidato `{info['key'][:12]}`, baseline `{info['base_key'][:12]}`",
           f"- PYTHONHASHSEED=0, cache aislada: `{info['view']}`", "",
           f"## Cambios por linea: bien->mal {len(good_to_bad)}, mal->bien {len(bad_to_good)}  (neto {len(bad_to_good) - len(good_to_bad):+d})", ""]
     for ttl, ids in (("bien -> mal", good_to_bad), ("mal -> bien", bad_to_good)):

@@ -8,11 +8,12 @@
 2. trial merge of the integration branch (INTEGRATION_BRANCH, default model/v3-harness); conflicts -> list the files and stop;
 3. run dev.py on the merged code (harness, scorer and dataset builder always come from THIS checkout), PYTHONHASHSEED=0,
    with a cache directory keyed by the hash of the cache-producing code, and compare.py's verdict against the baseline of the
-   integration tip (generated once per tree hash and kept in dev_runs/_baseline_<tree>_<window>);
+   integration tip (generated once per OUTPUT KEY and kept in dev_runs/_baseline_<key>_<window>; the key hashes only
+   solution/bankrec.py, src/**, the scorer, make_dev_dataset.py and the dev data, so tools/notes/README commits do not invalidate it);
 4. dev_runs/<branch>_<commit>/informe.md + a row in dev_runs/registro.csv (+ notes/registro_pruebas.md);
 5. --sealed: same on the sealed window, once per tested tree, logged in dev_runs/sealed_log.txt;
 6. --merge: merges the branch into the integration branch only if the last verdict for that exact commit was ACEPTAR
-   (and the integration tip has not moved since), and notes it in SUBMISSIONS.md as a candidate for LIVE (never uploads).
+   (and the integration CODE has not changed since: docs/tools commits do not count), and notes it in SUBMISSIONS.md as a candidate for LIVE (never uploads).
 Only one test runs at a time (lock file ~/hackdata/wt/.test.lock): a second one waits.
 """
 import argparse
@@ -43,7 +44,11 @@ LOCK = os.path.join(WT, ".test.lock")
 PY = os.environ.get("BANKREC_PY") or sys.executable
 WINDOWS = {"default": ("2025-04-01", "2025-05-31", os.path.join(HOME, "data_dev")),
            "sealed": ("2025-01-01", "2025-02-28", os.path.join(HOME, "data_dev_sealed"))}
-REG_COLS = ["fecha", "rama", "commit", "arbol", "base_arbol", "ventana", "nota", "delta", "veredicto", "minutos"]
+REG_COLS = ["fecha", "rama", "commit", "arbol", "base_arbol", "clave", "base_clave", "ventana", "nota", "delta", "veredicto", "minutos"]
+# Files that determine the pipeline's OUTPUT: the baseline / "same code" key depends on these (and on the dev data) only,
+# so a commit touching tools/dev.py, compare.py, test_branch.*, notes/ or the README does not invalidate a baseline.
+KEY_FILES = ("solution/bankrec.py", "starter/bankrec_score.py", "solution/tools/make_dev_dataset.py")
+KEY_DIRS = ("src/",)
 
 
 def say(*a):
@@ -136,6 +141,23 @@ def cache_code_hash(wt):
     return h.hexdigest()[:12]
 
 
+def output_key(rev, cwd, win, index=False):
+    """Hash of the blobs of the output-affecting files of a commit/tree (or of the index) + the dev dataset fingerprint."""
+    if index:
+        out = git("ls-files", "-s", cwd=cwd).stdout.splitlines()
+        ents = [(l.split("\t", 1)[1], l.split("\t", 1)[0].split()[1]) for l in out]
+    else:
+        out = git("ls-tree", "-r", rev, cwd=cwd).stdout.splitlines()
+        ents = [(l.split("\t", 1)[1], l.split("\t", 1)[0].split()[2]) for l in out]
+    h = hashlib.sha256()
+    for path, blob in sorted(ents):
+        if path in KEY_FILES or path.startswith(KEY_DIRS):
+            h.update(f"{path} {blob}\n".encode())
+    wj = os.path.join(WINDOWS[win][2], "window.json")
+    h.update(open(wj, "rb").read() if os.path.exists(wj) else b"<no dataset>")
+    return h.hexdigest()
+
+
 def make_view(code_hash, win):
     """A data directory for one cache key: symlinks to the shared dev dataset + its own solution/cache."""
     start, end, shared = WINDOWS[win]
@@ -186,14 +208,12 @@ def read_registro():
 
 def add_registro(row):
     p = os.path.join(RUNS, "registro.csv")
-    new = not os.path.exists(p)
     os.makedirs(RUNS, exist_ok=True)
-    with open(p, "a", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, REG_COLS)
-        if new:
-            w.writeheader()
-        w.writerow(row)
-    rows = read_registro()
+    rows = read_registro() + [row]
+    with open(p, "w", newline="", encoding="utf-8") as fh:  # rewritten whole: older rows may lack newer columns
+        w = csv.DictWriter(fh, REG_COLS, restval="")
+        w.writeheader()
+        w.writerows(rows)
     md = ["# Registro de pruebas de ramas", "", "Generado por `solution/tools/test_branch.sh` desde `dev_runs/registro.csv`.", "",
           "| fecha | rama | commit | ventana | nota | delta | veredicto | min |", "|---|---|---|---|---:|---:|---|---:|"]
     for r in rows:
@@ -210,6 +230,8 @@ def test(branch, sealed, force):
     ref, commit, src = resolve(branch)
     iref, icommit = integration_tip()
     itree = git("rev-parse", icommit + "^{tree}").stdout.strip()
+    ensure_dataset(win)
+    ikey = output_key(icommit, REPO, win)
     say(f"branch {branch} = {commit[:10]} ({src}); integration {INTEGRATION} = {icommit[:10]}; window {start}..{end}"
         f"{' (SEALED)' if sealed else ''}")
     if sealed:
@@ -236,17 +258,19 @@ def test(branch, sealed, force):
         tree = git("rev-parse", "HEAD^{tree}", cwd=wt).stdout.strip()
         if git("status", "--porcelain", cwd=wt).stdout.strip():
             sys.exit("worktree is not clean after the merge")
-        say(f"tested code: tree {tree[:12]} (branch commit {commit[:10]} + {INTEGRATION} {icommit[:10]}); PYTHONHASHSEED=0")
+        ckey = output_key("HEAD", wt, win)
+        say(f"tested code: tree {tree[:12]} (branch commit {commit[:10]} + {INTEGRATION} {icommit[:10]}); output key {ckey[:10]} "
+            f"(baseline {ikey[:10]}); PYTHONHASHSEED=0")
         if sealed and tree in done and not force:
             sys.exit(f"the sealed window was already used for this exact tree ({tree[:12]}), see dev_runs/sealed_log.txt "
                      f"(one sealed run per tree; --force overrides)")
 
         # ---- baseline of the integration tip (per tree hash)
-        base_name = f"_baseline_{itree[:10]}_{win}"
+        base_name = f"_baseline_{ikey[:10]}_{win}"
         base_dir = os.path.join(RUNS, base_name)
         if not os.path.exists(os.path.join(base_dir, "result.json")):
-            say(f"no baseline for the integration tree {itree[:10]} on the {win} window: generating it ...")
-            base_wt = os.path.join(WT, "_integration_" + itree[:10])
+            say(f"no baseline for output key {ikey[:10]} (integration tip {icommit[:10]}) on the {win} window: generating it ...")
+            base_wt = os.path.join(WT, "_integration_" + ikey[:10])
             add_worktree(base_wt, icommit)
             bv = make_view(cache_code_hash(base_wt), win)
             mins = run_dev(base_wt, base_name, bv, win)
@@ -258,8 +282,9 @@ def test(branch, sealed, force):
         name = f"{safe(branch)}_{commit[:8]}" + ("_sealed" if sealed else "")
         cand_dir = os.path.join(RUNS, name)
         view = make_view(cache_code_hash(wt), win)
-        if tree == itree and not force:
-            say("merged tree == integration tip: nothing to run (use --force to run it anyway)")
+        if ckey == ikey and not force:
+            say("the merged code has the same output key as the integration tip (only docs / tools differ): nothing to run "
+                "(--force runs it anyway)")
             shutil.rmtree(cand_dir, ignore_errors=True)
             shutil.copytree(base_dir, cand_dir)
             mins = 0.0
@@ -268,10 +293,10 @@ def test(branch, sealed, force):
         b, c = compare.load(base_dir), compare.load(cand_dir)
         label, why, deltas = compare.verdict(b, c)
         info = {"rama": branch, "commit": commit, "integration": INTEGRATION, "integration_commit": icommit, "tree": tree,
-                "base_tree": itree, "window": f"{start}..{end}", "sealed": sealed, "minutes": mins, "view": view}
+                "base_tree": itree, "key": ckey, "base_key": ikey, "window": f"{start}..{end}", "sealed": sealed, "minutes": mins, "view": view}
         gb, bg = branch_report.write(cand_dir, info, base_dir, cand_dir, shared, b, c, label, why, deltas)
         add_registro({"fecha": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "rama": branch, "commit": commit, "arbol": tree,
-                      "base_arbol": itree, "ventana": win, "nota": f"{c['score']:.2f}", "delta": f"{c['score'] - b['score']:+.2f}",
+                      "base_arbol": itree, "clave": ckey, "base_clave": ikey, "ventana": win, "nota": f"{c['score']:.2f}", "delta": f"{c['score'] - b['score']:+.2f}",
                       "veredicto": label, "minutos": f"{mins:.1f}"})
         if sealed:
             with open(os.path.join(RUNS, "sealed_log.txt"), "a") as fh:
@@ -301,8 +326,9 @@ def merge(branch):
     last = rows[-1]
     if last["veredicto"] != "ACEPTAR":
         sys.exit(f"last verdict for {branch} @ {commit[:10]} is {last['veredicto']}, not ACEPTAR: not merging")
-    if last["base_arbol"] != itree:
-        sys.exit(f"{INTEGRATION} moved since the test (baseline tree {last['base_arbol'][:10]}, now {itree[:10]}): test again")
+    ikey = output_key(icommit, REPO, "default")
+    if (last.get("base_clave") or "") != ikey:
+        sys.exit(f"the integration code changed since the test (baseline key {(last.get('base_clave') or '-')[:10]}, now {ikey[:10]}): test again")
     cur = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     if cur != INTEGRATION:
         sys.exit(f"check out {INTEGRATION} first (current: {cur})")
@@ -313,10 +339,10 @@ def merge(branch):
     if m.returncode:
         git("merge", "--abort", check=False)
         sys.exit("merge conflict (it should not happen after a passed test): " + m.stdout.strip())
-    got = git("write-tree").stdout.strip()
-    if got != last["arbol"]:
+    got = output_key(None, REPO, "default", index=True)
+    if got != last.get("clave"):
         git("merge", "--abort", check=False)
-        sys.exit(f"merged tree {got[:10]} differs from the tested tree {last['arbol'][:10]}: aborted, nothing changed")
+        sys.exit(f"the merged code (key {got[:10]}) differs from the tested code (key {(last.get('clave') or '-')[:10]}): aborted, nothing changed")
     sub = os.path.join(REPO, "SUBMISSIONS.md")
     txt = open(sub, encoding="utf-8").read()
     head = "## Candidatos a subir a LIVE (no subidos)"

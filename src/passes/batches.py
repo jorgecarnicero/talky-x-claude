@@ -446,14 +446,16 @@ class Batches:
 
     # ---------------------------------------------------------------- cards
     def _order_item(self, order, ent, gross, want_open=True):
-        iid = self.order_item.get(order)
+        # FINAL: card order numbers repeat across entities (WEB26-9000002 exists for UK01 and AU01) -> cache per entity
+        key = (order, ent)
+        iid = self.order_item.get(key)
         if iid:
             return iid
         c = self.ix.doc_cands(order, {"ARI"}, {ent}) or self.ix.doc_cands(order, {"ARI"}, None)
         if not c:
             return None
         iid = self.ix._best(c, gross, want_open)
-        self.order_item[order] = iid
+        self.order_item[key] = iid
         return iid
 
     def try_card(self, t, txt):

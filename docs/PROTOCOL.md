@@ -1,47 +1,55 @@
-# Anti-overfitting protocol (model/v8) — pre-registered 2026-11-07, before the v8 baseline was scored
+# Anti-overfitting protocol (model/v8)
 
-Why: the organisers judge overfitting strictly, FINAL is a single shot on new months (2026-01..06) with new masters
-(maybe a new entity / ZAR), and LIVE has run ~0.9 below our dev numbers. Sources and reasoning:
-`docs/research/overfitting.md`. Changing this file after experiments start must be logged with the reason.
+Pre-registered 2026-11-07 before the v8 baseline was scored; amended the same day (see Changes) to merge with the
+team's method `docs/ANTI_OVERFIT_team.md` (gates G1–G7, `solution/tools/significance.py`). Sources:
+`docs/research/overfitting.md` and the team doc §1. Leakage audit: `docs/AUDIT.md`.
 
-## Windows (TRAIN months, scored with the official scorer restricted to the window)
+## Windows (TRAIN months, official scorer restricted to the window)
 
 | Window | Months | Use |
 |---|---|---|
-| TUNE | 2024-10..11 | free: per-segment tables, reading individual lines, diagnostics |
-| HOLD | 2025-02..03 | accept / reject only. Totals only (no per-segment output is written). Partly spent: v4–v6 were tuned on it |
-| GATE | 2025-04..05 | sealed. Run exactly ONCE, on a frozen commit whose hash is logged before the run |
+| tune | 2024-10..11 | iterate freely: per-segment tables, reading lines, diagnostics |
+| dev | 2025-04..05 | the team's dev window (n = 69,553): accept / reject only. We read totals and the gate verdict, never segments |
+| sealed | 2025-01..02 | the team's sealed window: ONE run per accepted candidate (`sealed_check.sh`), only the sign is read |
 
-Every learned table (payer directory, category model, opening balances, priors, any classifier) must use only data
-dated before the start of the window being scored (checked by the leakage audit, `docs/AUDIT.md`).
+2025-02..03 (our first HOLD) is no longer used: it overlaps the sealed window. Every learned table uses only data
+dated before the start of the scored window; nothing dated after the window end is read (docs/AUDIT.md, fixed).
 
-## Acceptance rule for a change (all must hold)
+## Acceptance (all must hold; `./accept.sh <base> <new>` checks 1–4)
 
-1. TUNE: Δscore ≥ +0.05 (goal threshold) AND the lower bound of the one-sided 95 % payer-cluster paired bootstrap
-   (`src/compare.py --cluster payer`, 2000 resamples) is > 0.
-2. HOLD: Δscore ≥ −0.02 (goal threshold) AND Δ > −1 bootstrap SE. Only the accept/reject bit is used; HOLD totals are
-   rounded to 0.01 in the log. Budget: 40 HOLD looks (counter in `docs/EXPERIMENTS.md`); when it is spent, HOLD
-   decisions stop and only TUNE + the final GATE remain.
-3. No segment with ≥ 100 TUNE lines drops > 2 points of accuracy; no Trace / Error in the logs.
-4. Leakage checklist answered in the experiment log:
-   - learned data only from before the scored window? no golden-derived input that FINAL won't have?
-   - patterns / keywords found on TUNE only, never by reading HOLD / GATE lines?
-   - no literal ids, IBANs, names, amounts or dates from the data in rules (grep check)?
-   - every rule cites POLICIES.md / DATA_DICTIONARY.md, a banking convention, or a research card?
-   - numeric thresholds are round and sit on a plateau (sweep of ±1 step shown on TUNE), not on a peak?
-5. A change whose gain comes from a class / segment with < 30 TUNE lines is not accepted on that basis alone.
+1. **TUNE composite:** Δ ≥ +0.05 AND the one-sided 95 % lower bound of the payer-cluster paired bootstrap
+   (`src/compare.py`, 2000 resamples) > 0.
+2. **Team gates G1–G3 on dev** (`significance.py` = ACEPTAR): McNemar z ≥ 3 and c − b ≥ 30 lines; payer sign test
+   p ≤ 0.01 with no payer > 25 % of c − b; c − b > 0 in each month and ≥ 0 in each entity with > 1,000 lines.
+3. **Dev composite:** Δ ≥ −0.02 AND > −1 bootstrap SE (the team gates measure lines, this guards the composite score,
+   incl. the exception macro F1).
+4. **TUNE segments:** none with ≥ 100 lines loses > 2 accuracy points; no Trace / Error.
+5. **G4 sealed:** `./sealed_check.sh` once; the sign must match dev, else reject and change nothing.
+6. **G5 literal sweep** on `git diff`: `grep -nE '20(24|25)-[0-9]{2}|BT-|ARI-|ARC-|API-|APC-|CUS[0-9]|SUP[0-9]|[0-9]+\.[0-9]{2}\b'`
+   + a read of every new constant; each justified by POLICIES.md / DATA_DICTIONARY.md / a generic rule.
+7. **G7:** each change behind its own env flag (default off until accepted) and fails soft (exception → skip, trunk
+   output intact).
+8. **Leakage checklist** answered in `docs/EXPERIMENTS.md`; thresholds round and on a plateau (±1 step); a gain coming
+   only from a class / segment with < 30 lines does not count.
 
-Rejected experiments are logged too (hypothesis, diff summary, TUNE CI, HOLD bit).
+Verdict NEUTRO (no evidence) = not merged, no LIVE upload. Every experiment is logged, accepted or not.
 
-## Other rules
+## LIVE, FINAL and reporting
 
-- Ablation: before the final freeze, remove each v8 change one at a time on TUNE; drop any with no significant gain.
-- Robustness for FINAL: unseen-customer test (drop 25 % of customers from every learned table, compare their accuracy
-  with seen customers) and a synthetic new-currency/entity smoke test; unknown codes must degrade gracefully.
-- LIVE: a sanity monitor only. At most one upload per frozen release candidate (every 3 accepted changes). Before
-  uploading, write down the predicted LIVE (HOLD − gap). A large miss triggers a leakage audit, never tuning.
-- No change is ever accepted because of a LIVE score.
-- GATE: done when HOLD target is reached; the result is reported whatever it is; no code change after GATE except
-  reverting to the previous frozen version.
-- Report for the organisers (`docs/MODEL_CARD.md` at the end): experiment count, HOLD-look count, window table, GATE
-  result, unseen-customer gap, ablation table, grep proof of no instance constants, dev ↔ LIVE relation.
+- **G6 LIVE:** one full CSV per accepted release candidate, handed to the user (we never upload); predicted LIVE
+  written down first (dev − gap, gap ≈ 0.6 after the leakage fixes); same sign as dev required, never tuned on.
+- Before the freeze: ablation (drop each accepted change on TUNE), unseen-customer test (25 % of customers removed from
+  learned tables), synthetic new currency / entity smoke test, `--phase final` smoke test.
+- Report: experiment count, dev looks, sealed runs, ablation table, unseen-customer gap, literal-sweep proof,
+  dev ↔ LIVE relation.
+
+## Goal mapping (user delegated the choice, 2026-11-07)
+
+The /goal text's "HOLD" is now the dev window 2025-04..05 (target ≥ 96.2) and "GATE" is the sealed sign check plus
+G6 on LIVE.
+
+## Changes
+
+- 2026-11-07: windows changed from TUNE/HOLD 2025-02..03/GATE 2025-04..05 to tune/dev/sealed because the team's
+  method already uses 2025-04..05 as dev (so it could not be our sealed GATE) and 2025-01..02 as sealed (our HOLD
+  overlapped February). HOLD had 1 look (the baseline); GATE was never run. Team gates G1–G7 added on top of ours.

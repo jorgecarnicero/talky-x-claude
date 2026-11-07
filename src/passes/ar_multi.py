@@ -171,3 +171,96 @@ def run(ctx):
         ctx.allocate(t.bank_txn_id, out, "multi:cn_net")
         stats["cn_net"] += 1
     print("    ar_multi:", dict(stats))
+    if FX_ON:
+        run_fx(ctx)
+
+
+FX_ON = os.environ.get("MULTI_FX", "1") == "1"
+FX_MAX_FREE = 4
+
+
+def run_fx(ctx):
+    """Cross-currency receipts (POLICIES §3 FX_DIFFERENCE) -- before v3import.
+
+    When the bank line carries the instructed amount in another currency (orig_amount / orig_currency, e.g.
+    "/OCMT/USD3499,48/"), the payer paid invoice amounts in the INVOICE currency: explain orig_amount exactly (to the
+    cent) with the open items of the identified customer in that currency. Invoice rows -> FX_DIFFERENCE (full open
+    amount), return credit notes attached to a paid invoice -> no exception. Claims only a unique exact explanation;
+    without references at most FX_MAX_FREE invoices.
+    """
+    from passes.ar_match import Matcher, CONNECT
+    from ar_index import IBAN_RE
+    from data import norm_words
+    pend = ctx.pending()
+    pend = pend[(pend.amount > 0) & pend.orig_currency.fillna("").astype(str).str.len().gt(0)
+                & (pend.orig_currency.fillna("") != pend.currency) & pend.orig_amount.notna()]
+    if not len(pend):
+        return
+    m = Matcher(ctx)
+    it = m.ix.item
+    stats = defaultdict(int)
+    for t in pend.itertuples(index=False):
+        oc, T = t.orig_currency, cents(t.orig_amount)
+        if T <= 0:
+            continue
+        ent, bdate = t.entity, t.booking_date
+        s = m.text_words(t)
+        words = [w for w in norm_words(s).split() if w not in CONNECT]
+        toks = m.tokens(s)
+        grefs = m.global_refs(ent, toks)
+        cand = set(it[i][2] for i in grefs)
+        if isinstance(t.counterparty_account, str) and t.counterparty_account:
+            for cid in m.ix.iban.get(norm(t.counterparty_account), ()):
+                if cid in m.ix.cust and m.ix.cust[cid].entity == ent:
+                    cand.add(cid)
+        cand |= {c for c, sc in m.names(ent, words).items() if sc >= 1.0}
+        sols = []
+        for cid in cand:
+            allit, refs = m.cust_ctx(cid, t, bdate, toks, grefs)
+            opn = [i for i in allit if m.open.get(i, 0) > 0.005 and it[i][4] <= bdate and it[i][6] == oc]
+            opn = m.make_units(opn, ent)
+            opn = [i for i in opn if it[i][0] == "ARI" and m.sv(i) > 0.005]   # free credit notes never (R1)
+            if not opn:
+                continue
+            val = {i: cents(m.sv(i)) for i in opn}
+            R = [i for i in opn if refs.get(i)]
+            if R and sum(val[i] for i in R) == T:
+                sols.append((cid, R, refs, list(m.attach.items()), list(m.zero_units)))
+                continue
+            lo = (pd_ts(bdate, -400))
+            pool = [i for i in opn if it[i][4] >= lo or refs.get(i)]
+            if len(pool) > 40 or len(pool) * T > 4e8:
+                continue
+            sel = m._dp_one(pool, val, T)
+            if not sel:
+                continue
+            if any(m._dp_one([x for x in pool if x != q], val, T) is not None for q in sel):
+                stats["ambig"] += 1
+                continue
+            if sum(1 for i in sel if not refs.get(i)) > FX_MAX_FREE:
+                stats["big"] += 1
+                continue
+            sols.append((cid, sel, refs, list(m.attach.items()), list(m.zero_units)))
+        if len(sols) != 1:
+            stats["nosol" if not sols else "multi_cust"] += 1
+            continue
+        cid, sel, refs, att, zu = sols[0]
+        m.attach = dict(att)
+        m.zero_units = zu
+        m.cur_refs = refs
+        m._zlo = pd_ts(bdate, -90)
+        sel = sorted(sel, key=lambda i: (it[i][4], it[i][3]))
+        rows = m.rows_for(sel, float(t.amount), True)
+        seen, clean = set(), []
+        for r in rows:
+            if r["item_id"] not in seen:
+                seen.add(r["item_id"])
+                clean.append(r)
+        ctx.allocate(t.bank_txn_id, clean, "multi:fx")
+        stats["fx"] += 1
+    print("    ar_multi fx:", dict(stats))
+
+
+def pd_ts(d, days):
+    from datetime import date, timedelta
+    return (date(int(d[:4]), int(d[5:7]), int(d[8:10])) + timedelta(days=days)).isoformat()

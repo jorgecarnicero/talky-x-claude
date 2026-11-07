@@ -27,6 +27,8 @@ STRICT_WEAK = True
 STRICT_GAP = 0.3
 NM_FRACTIONS = (0.4, 0.5, 0.6)   # n-to-m: one invoice of a multi-invoice transfer paid at a clean fraction
 NM_ON = os.environ.get("AR_NM", "1") == "1"
+ZERO_REF = os.environ.get("AR_ZREF", "1") == "1"  # invoice+CN pairs netting to zero: only when the text cites one
+CN_REL = os.environ.get("AR_CNREL", "1") == "1"   # free credit notes only when referenced or rappel 'offset' (§5.9)
 NM_MAX_POOL = 40
 NM_COST = 3e10
 NM_MAX_ITEMS = 4   # without references: chance exact-cent combinations grow fast with the set size
@@ -62,11 +64,13 @@ class Matcher:
         self._zlo = ""
         self.attach = {}
         self.zero_units = []
+        self.cur_refs = {}
 
     def load_pdf(self, ctx):
         """Optional PDF clause info (src/pdfinfo.py): instalments, retention, advance, service month, replaced
         invoices, new IBAN notices. Everything degrades to empty dicts when the caches are missing."""
         self.p_inst, self.p_ret, self.p_adv, self.p_month, self.p_repl = {}, {}, {}, {}, {}
+        self.p_rappel = {}
         try:
             import pdfinfo as P
             self.p_inst = P.instalments(ctx) or {}
@@ -74,6 +78,7 @@ class Matcher:
             self.p_adv = P.advance(ctx) or {}
             self.p_month = P.service_month(ctx) or {}
             self.p_repl = P.replaced_by(ctx) or {}
+            self.p_rappel = P.rappel_mode(ctx) or {}
             P.new_ibans(ctx)
             for ib, pid in (ctx.cache.get("pdfinfo_iban_party") or {}).items():
                 if pid in self.ix.cust:
@@ -351,6 +356,12 @@ class Matcher:
             opn = [i for i in opn if refs.get(i) or self.ix.item[i][0] != "ARI"
                    or self.open[i] > DUST_PCT * self.ix.item[i][7] + 0.005]
         opn = self.make_units(opn, t.entity)
+        self.cur_refs = refs
+        if CN_REL:
+            # a credit note not attached to an open invoice of the line may only be netted when the text cites it or,
+            # for a rappel, when its PDF says it is offset in the next payment (paid-out rappels never net)
+            opn = [i for i in opn if self.ix.item[i][0] != "ARC" or refs.get(i)
+                   or (self.ix.item[i][14] == "R" and self.p_rappel.get(i) == "offset")]
         self._zlo = (_d(bdate) - timedelta(days=90)).isoformat()
         # group open items by currency
         bycur = defaultdict(list)
@@ -420,6 +431,8 @@ class Matcher:
         if ZERO_UNITS and self.zero_units:
             for i in self.zero_units:
                 if self.ix.item[i][4] < self._zlo:
+                    continue
+                if ZERO_REF and not (self.cur_refs.get(i) or any(self.cur_refs.get(c) for c in self.attach.get(i, ()))):
                     continue
                 ex.append(i)
                 ex.extend(self.attach.get(i, ()))

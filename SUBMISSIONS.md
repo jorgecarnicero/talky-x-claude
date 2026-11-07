@@ -15,6 +15,7 @@ Produce the file from that branch (`python solution/bankrec.py --phase live --ou
 | v2 | `model/v2` | 80.66 | 77.73 | **77.00** | 84.7 % (97.8 / 74.6) | 83.6 % | 48.0 % | + oldest-due subset search, FX in item currency, confirming = latest due on a business day, txt-advice fix |
 | v3 | `model/v3` | 85.28 | 82.90 | **82.25** | 85.4 % (98.3 / 75.4) | 87.4 % | 66.8 % | block A + quick block B (see below) |
 | v3.5 | `model/v3.5` | – | 92.82 | **91.92** | 94.2 % (98.5 / 90.3) dev | 95.7 % dev | 83.3 % dev | v3 + high-precision passes (batches, remittance, AP, non-item) + AR matcher on v3's unidentified receipts — see docs/V35.md |
+| v6c | `model/v6c` | – | 94.36 | **93.44** | 94.4 % (98.1 / 90.9) | 96.4 % | 86.8 % | v6b + credit note only with its own invoice, zero-pairs only when cited, FX matched on orig_amount (ar_fx 68.5 -> 77.8 %). FINAL candidate: RUN_FINAL.sh |
 | v6b | `model/v6b` | – | 94.20 | **93.31** | 94.3 % (98.0 / 90.8) | 96.2 % | 86.6 % | v6a + ar_bigpool (no-ref multi-invoice receipts), exc_fix R5 v2 (overpayment 56 -> 76 %), dust filter |
 | v6a | `model/v6a` | – | 93.69 | **92.81** | 94.1 % (98.0 / 90.5) | 96.0 % | 84.9 % | v4-cascade + ar_match n-to-m step (open balances + one invoice at 40/50/60 %): ar_n_to_m 30.5 % -> 48.9 % on LIVE |
 | v4-cascade | `model/v4-cascade` | – | 93.57 | **92.67** | 94.0 % (98.0 / 90.3) | 95.8 % | 84.7 % | v3.5 + ar_pdf, ar_multi, exc_fix (+R5), cancel_guard, payer_dir — see docs/V4.md |

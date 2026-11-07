@@ -12,8 +12,12 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-DEFAULT_DATA = os.environ.get("BANKREC_DATA", os.path.join(REPO, "..", "dataroot"))
-CACHE = os.environ.get("BANKREC_CACHE", os.path.join(REPO, "..", "cache"))
+# Team layout (talky-x-claude main): data extracted at the repo root (masters/, train/, live/, final/, starter/).
+# Lead's layout: data in ../dataroot. Env vars override both.
+_TEAM = os.path.isdir(os.path.join(REPO, "masters"))
+DEFAULT_DATA = os.environ.get("BANKREC_DATA", REPO if _TEAM else os.path.join(REPO, "..", "dataroot"))
+CACHE = os.environ.get("BANKREC_CACHE", os.path.join(REPO, "solution", "cache", "v35") if _TEAM
+                       else os.path.join(REPO, "..", "cache"))
 
 PHASE_CHAIN = {"sample": ["sample"], "train": ["train"], "live": ["train", "live"], "final": ["train", "live", "final"]}
 EXCEPTIONS = ["PARTIAL", "OVERPAYMENT", "SHORT_DISCOUNT", "SHORT_BANK_CHARGES", "SHORT_WITHHOLDING", "SHORT_DISPUTE",

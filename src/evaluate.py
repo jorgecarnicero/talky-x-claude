@@ -7,7 +7,9 @@ The submission may cover more lines than the window; rows outside it are dropped
 """
 import argparse, csv, gzip, io, json, os, sys, tempfile
 
-DEFAULT_DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "dataroot")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from data import DEFAULT_DATA  # noqa: E402
+
 EXC = ["PARTIAL", "OVERPAYMENT", "SHORT_DISCOUNT", "SHORT_BANK_CHARGES", "SHORT_WITHHOLDING", "SHORT_DISPUTE",
        "DUPLICATE_PAYMENT", "UNIDENTIFIED", "RETURNED", "FX_DIFFERENCE"]
 

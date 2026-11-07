@@ -94,6 +94,7 @@ def parse_amount(s):
     return -v if neg else v
 
 
+USE_PDFS = os.environ.get("BANKREC_NO_PDFS") != "1"
 UNIDENTIFIED_ONLY_UNKNOWN_PAYER = os.environ.get("BANKREC_UNID_KNOWN") == "1"  # A/B: dev says always flag (81.65 vs 81.35)
 EXC_FULL = {"", "SHORT_DISCOUNT", "SHORT_BANK_CHARGES", "SHORT_WITHHOLDING", "OVERPAYMENT"}
 WITHHOLDING_ENTITIES = {"MX01", "BR01", "MA01"}  # POLICIES §3: some customers in Mexico, Brazil and Morocco
@@ -117,6 +118,20 @@ for _i, _names in enumerate([
     for _n in _names.split():
         _MONTHS[_n] = _i
 _MONTH_RE = re.compile(r"\b(" + "|".join(sorted(_MONTHS, key=len, reverse=True)) + r")\.?\s*'?(\d{2,4})?\b")
+
+
+_KN_RE = re.compile(r"(?:INSTAL+MENT|PLAZO|ECHEANCE|ECHEANCES|RATA|RATE|PARCELA|VENCIMIENTO|TEILZAHLUNG|CUOTA|"
+                    r"TERMIN|RATY|PAYMENT)\s*(?:NO\.?\s*)?(\d{1,2})\s*(?:/|OF|DE|SUR|VON|DI|Z)\s*(\d{1,2})\b")
+
+
+def instalment_k_of_n(text):
+    """"PLAZO 2/3" / "INSTALMENT 3 OF 3" / "ECHEANCE 1/3" -> (k, n)"""
+    m = _KN_RE.search(strip_acc(text).upper())
+    if m:
+        k, n = int(m.group(1)), int(m.group(2))
+        if 1 <= k <= n <= 12 and n >= 2:
+            return k, n
+    return None
 
 
 def service_month(text, bday):
@@ -143,11 +158,18 @@ def service_month(text, bday):
 # ----------------------------------------------------------------------------- items
 class Item:
     __slots__ = ("id", "typ", "side", "entity", "party", "name", "doc", "cur", "total", "open", "issue", "due", "terms",
-                 "po", "related", "pm", "paid_by")
+                 "po", "related", "pm", "paid_by",
+                 # from the document PDF (solution/pdfs.py)
+                 "plan", "payable", "adv_net", "smonth", "cn_mode", "cancelled", "replaced_by")
 
     def __init__(self, **k):
         for s in self.__slots__:
             setattr(self, s, k.get(s))
+
+    def __getattr__(self, name):  # slots added after a cache was pickled read as None
+        if name in Item.__slots__:
+            return None
+        raise AttributeError(name)
 
 
 def load_items(root, phase):
@@ -318,6 +340,8 @@ class Rec:
         self.why = {}  # bank_txn_id -> matcher name
         self._index_items()
         self._load_masters()
+        if USE_PDFS:
+            self._apply_pdfs()
 
     # --------------------------------------------------------------- indexes
     def _index_items(self):
@@ -388,8 +412,71 @@ class Rec:
                 df[t] += 1
         n = max(1, len(self.party_tokens))
         self.idf = {t: math.log(n / c) for t, c in df.items()}
-        self.party_tot = {p: (sum(self.idf.get(x, 0) for x in toks) or 1.0) for p, toks in self.party_tokens.items()}
+        self.party_tot = {p: (sum(self.idf.get(x, 0) for x in sorted(toks)) or 1.0) for p, toks in self.party_tokens.items()}
         log(f"masters: {len(self.customers)} customers, {len(self.suppliers)} suppliers")
+
+    # --------------------------------------------------------------- document PDFs
+    def _apply_pdfs(self):
+        try:
+            sys.path.insert(0, os.path.join(self.root, "solution"))
+            import pdfs  # noqa
+            idx = pdfs.load_index(self.root, build=True)
+        except ImportError as e:
+            log(f"PDFs skipped ({e}); pip install pymupdf")
+            return
+        typ_of = {"invoice": "ARI", "credit_note": "ARC", "supplier_invoice": "API", "supplier_credit_note": "APC"}
+        n = Counter()
+        cancels = []
+        for (ph, f), v in idx.items():
+            cl = v["clauses"]
+            if not cl:
+                continue
+            if "new_iban" in cl and v["party_id"]:
+                self.party_by_iban[cl["new_iban"]["iban"]].add(v["party_id"])
+                n["new_iban"] += 1
+            typ = typ_of.get(v["document_type"])
+            if not typ:
+                continue
+            its = [i for i in self.by_doc.get(nalnum(v["document_number"]), []) if i.typ == typ and i.entity == v["entity"]]
+            if len(its) > 1 and v["party_id"]:
+                its = [i for i in its if i.party == v["party_id"]] or its
+            if not its:
+                continue
+            it = its[0]
+            ins = cl.get("instalments")
+            if ins and ins["amounts"] and (ins["currency"] in (None, it.cur)):
+                it.plan = ins["amounts"]
+                n["instalments"] += 1
+            if "retention" in cl:
+                it.payable = cl["retention"]["payable"]
+                n["retention"] += 1
+            if "advance" in cl:
+                it.adv_net = cl["advance"]["net_due"]
+                n["advance"] += 1
+            if "service_month" in cl:
+                y, m = cl["service_month"].split("-")
+                it.smonth = (int(y), int(m))
+                n["service_month"] += 1
+            if "rebate" in cl:
+                it.cn_mode = cl["rebate"]["mode"]
+                n["rebate_" + it.cn_mode] += 1
+            if "cn_mode" in cl:
+                it.cn_mode = cl["cn_mode"]
+                n["apc_" + it.cn_mode] += 1
+            if "replaces" in cl:
+                cancels.append((it, cl["replaces"]["document_number"]))
+        # "anula y sustituye": the old invoice and its cancelling credit note are never settled by bank (POLICIES §5.7)
+        for new, old_doc in cancels:
+            olds = [i for i in self.by_doc.get(nalnum(old_doc), []) if i.typ == "ARI" and i.entity == new.entity
+                    and i.id != new.id]
+            for old in olds:
+                old.cancelled, old.replaced_by, old.open = True, new, 0
+                n["replaced"] += 1
+                for cn in self.by_party.get(old.party, ()):
+                    if cn.typ == "ARC" and nalnum(cn.related) == nalnum(old.doc):
+                        cn.cancelled, cn.open = True, 0
+                        n["cancel_cn"] += 1
+        log("pdf clauses applied:", dict(n))
 
     # --------------------------------------------------------------- utilities
     def fx_rate(self, cur, day):
@@ -464,7 +551,7 @@ class Rec:
         cands = Counter()
         ib = t["counterparty_account"] or ""
         for iban in [ib] + re.findall(r"\b[A-Z]{2}\d{2}[A-Z0-9]{12,30}\b", t["text"]):
-            for p in self.party_by_iban.get(iban, ()):
+            for p in sorted(self.party_by_iban.get(iban, ())):
                 cands[p] += 5.0
         txt = " ".join([t["text"], t["counterparty_name"], t["ref2"]])
         toks = set(name_tokens(txt))
@@ -476,10 +563,10 @@ class Rec:
             if n_ <= 1500 and len(pool) + n_ <= 2500:
                 pool |= idx[tk]
         ptot = self.party_tot
-        for p in pool:
+        for p in sorted(pool):
             pt = self.party_tokens[p]
             tot = ptot[p]
-            m = sum(self.idf.get(x, 0) for x in pt & toks)
+            m = sum(self.idf.get(x, 0) for x in sorted(pt & toks))
             frac = m / tot
             if frac >= 0.5:
                 cands[p] += frac + m / 1000.0
@@ -735,13 +822,26 @@ class Rec:
         toks = set(name_tokens(r["drawer"]))
         idx = self.name_idx.get(entity, {})
         sc = Counter()
-        for tk in toks:
-            for p in idx.get(tk, ()):
+        for tk in sorted(toks):
+            for p in sorted(idx.get(tk, ())):
                 sc[p] += self.idf.get(tk, 0)
-        for p, _ in sc.most_common(5):
+        # rank drawers by the share of their name matched (not raw idf), try every plausible one
+        ranked = sorted(((s / self.party_tot.get(p, 1.0), s, p) for p, s in sc.items()), key=lambda x: (-x[0], -x[1], x[2]))
+        for frac, _, p in ranked[:60]:
+            if frac < 0.4:
+                break
             for it in self.by_party.get(p, ()):
                 if it.typ == "ARI" and (it.open == a or (settled_ok and it.open == 0 and it.total == a)):
                     return (it, a, "")
+        # last resort: the only open cheque-payable invoice of this entity with exactly this amount
+        if not hasattr(self, "_cheque_amt"):
+            self._cheque_amt = defaultdict(list)
+            for it in self.items.values():
+                if it.typ == "ARI" and it.pm == "cheque":
+                    self._cheque_amt[(it.entity, it.total)].append(it)
+        c = [i for i in self._cheque_amt.get((entity, a), []) if i.open == a]
+        if len(c) == 1:
+            return (c[0], a, "")
         return None
 
     def run_items(self, rows):
@@ -1089,6 +1189,7 @@ class Rec:
                     c = self.by_digits.get((ent, dg), []) or self.by_digits.get((ent, dg.lstrip("0")), [])
             if side == "AR":
                 c = [i for i in c if i.entity == ent]
+            c = [i.replaced_by if i.replaced_by is not None else i for i in c]
             for i in c:
                 if i.id not in seen:
                     seen.add(i.id)
@@ -1136,7 +1237,7 @@ class Rec:
         bday = d(t["booking_date"])
         best = None
         for c in cands:
-            if c.typ not in ("ARI", "API") or c.open != 0:
+            if c.typ not in ("ARI", "API") or c.open != 0 or c.cancelled:
                 continue
             if c.issue and (bday - c.issue).days > max_age_days:
                 continue
@@ -1167,7 +1268,7 @@ class Rec:
         R = A - base
         if R <= 0:
             return None
-        parties = {r.party for r in refs}
+        parties = sorted({r.party for r in refs})
         ids = {r.id for r in refs}
         others = [i for i in self.open_items_of(parties, refs[0].side) if i.id not in ids and i.cur == t["currency"]]
         vals = [(c, self.signed(c)) for c in others]
@@ -1203,7 +1304,9 @@ class Rec:
         """Try to explain |amt| with a subset of candidate items. Returns (rows, how) or None."""
         A = abs(amt)
         bday = d(t["booking_date"])
-        cands = [c for c in cands if c.open > 0]
+        cands = [c for c in cands if c.open > 0 and not c.cancelled]
+        if amt > 0:  # a rebate "paid to your bank account" is settled by our transfer, not netted in a receipt
+            cands = [c for c in cands if not (c.typ == "ARC" and c.cn_mode == "paid_out")]
         if not cands:
             return None
         cur_items = [c for c in cands if c.cur == t["currency"]]
@@ -1229,10 +1332,34 @@ class Rec:
                     y, m = sm[0], sm[1] + 1
                     if m == 13:
                         y, m = y + 1, 1
-                    hit = [c for c in exact if c.issue and (c.issue.year, c.issue.month) == (y, m)]
+                    hit = [c for c in exact if c.smonth == sm] or                         [c for c in exact if c.smonth is None and c.issue and (c.issue.year, c.issue.month) == (y, m)]
                     if hit:
                         return [(hit[0], hit[0].open, "")], "exact_month"
             return [(exact[0], exact[0].open, "")], "exact"
+        # 1b. partial payments announced by the invoice PDF: instalment, net due after an advance, retention.
+        # The bank text often says which instalment it is ("PLAZO 2/3", "INSTALMENT 3/3"): the last one has no exception.
+        kn = instalment_k_of_n(" ".join([t["text"], t["remittance_info"], t["ref2"]]))
+        for c in cands:
+            if c.typ != "ARI":
+                continue
+            T = tgt(c)
+            if T is None or T > c.open:
+                continue
+            plan_hit = c.plan and any(abs(T - a) <= 1 for a in c.plan)
+            split_hit = kn and abs(T - int(round(c.total / kn[1]))) <= kn[1] + 1  # equal split, no PDF
+            if plan_hit or split_hit:
+                if kn and kn[0] == kn[1]:
+                    return [(c, T, "")], "instalment_last"
+                if T < c.open:
+                    return [(c, T, "PARTIAL")], "instalment"
+            if T == c.open:
+                continue
+            if c.plan and any(abs(T - a) <= 1 for a in c.plan):
+                return [(c, T, "PARTIAL")], "instalment"
+            if c.adv_net and c.open == c.total and abs(T - c.adv_net) <= 1:
+                return [(c, T, "PARTIAL")], "advance"
+            if c.payable and c.open == c.total and abs(T - c.payable) <= 1:
+                return [(c, T, "PARTIAL")], "retention_pdf"
         # credit note refunded / paid out
         for c in cands:
             if c.typ in ("ARC", "APC") and eq(c, c.open, tgt(c)):

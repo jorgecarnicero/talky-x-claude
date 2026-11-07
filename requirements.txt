@@ -1,0 +1,1 @@
+pymupdf>=1.24  # document PDFs (solution/pdfs.py); everything else is standard library

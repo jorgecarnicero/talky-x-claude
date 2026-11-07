@@ -1,0 +1,66 @@
+# Map segment -> block, class -> block, used ONLY to report (headroom.py views). Never read by the pipeline.
+# Syntax (parsed by hr_lib.load_blocks, no PyYAML needed): "block:" / "  segments:" / "    - name"; `*` globs allowed; # comments.
+# Each segment / class belongs to the FIRST block that lists it; unlisted ones go to the view "sin_bloque".
+#
+#  matching    : choosing WHICH items a payment settles (references, payer, subsets, batches, AP runs) and lines without items
+#  excepciones : the payment deviates from the item (partial, over/short, discount, dispute, withholding, duplicate, fx, returns)
+#  pdfs        : the answer lives in a document: PDF clauses (instalments, retention, advance, replaced invoice, service month,
+#                factoring, new IBAN, credit-note refund vs offset) and remittance advices (RA_*.pdf/csv/xlsx/txt)
+
+pdfs:
+  segments:
+    - ar_instalment
+    - ar_retention
+    - ar_retention_release
+    - ar_advance_deduction
+    - ar_replaced_invoice
+    - ar_same_amount_month
+    - ar_credit_note_paid_out
+    - ap_factored
+    - ar_new_iban
+    - customer_refund
+    - customer_advance
+    - ar_1toN_remittance
+    - ar_1to1_remittance
+  classes: []
+
+excepciones:
+  segments:
+    - ar_partial
+    - ap_partial
+    - ar_overpayment
+    - ar_short_discount
+    - ar_discount_late
+    - ar_short_dispute
+    - ar_dispute_settlement
+    - ar_short_withholding
+    - ar_short_bank_charges
+    - ar_duplicate_payment
+    - ap_duplicate_payment
+    - ap_duplicate_refund
+    - ar_fx
+    - ap_fx
+    - ar_dd_returned
+    - ar_cheque_returned
+    - ar_card_chargeback
+    - ap_returned_transfer
+    - ap_supplier_refund
+  classes:
+    - PARTIAL
+    - OVERPAYMENT
+    - SHORT_DISCOUNT
+    - SHORT_BANK_CHARGES
+    - SHORT_WITHHOLDING
+    - SHORT_DISPUTE
+    - DUPLICATE_PAYMENT
+    - FX_DIFFERENCE
+    - RETURNED
+
+matching:
+  segments:
+    - ar_*
+    - ap_*
+    - unidentified*
+    - nonitem_*
+  classes:
+    - UNIDENTIFIED

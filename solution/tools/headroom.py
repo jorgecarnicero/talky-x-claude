@@ -194,8 +194,26 @@ def compute(run_name, data=None, top=10, light=False, log=print):
     out["classes"] = classes
     out["macro_classes"] = k_cls
 
-    # ---- detail of the top segments
+    # ---- blocks (reporting only, solution/tools/blocks.yaml)
+    blocks = hr_lib.load_blocks()
+    for s_ in segs:
+        s_["block"] = hr_lib.block_of(s_["segment"], blocks, "segments")
+    for c_ in classes:
+        c_["block"] = hr_lib.block_of(c_["class"], blocks, "classes")
+    bl = {}
+    for name in list(blocks) + ["sin_bloque"]:
+        bs = [s_ for s_ in segs if s_["block"] == name]
+        bc = [c_ for c_ in classes if c_["block"] == name]
+        if bs or bc:
+            bl[name] = {"segments": [s_["segment"] for s_ in bs], "classes": [c_["class"] for c_ in bc],
+                        "wrong": sum(s_["wrong"] for s_ in bs), "points_sum": sum(s_["points"] for s_ in bs)}
+    out["blocks"] = bl
+
+    # ---- detail of the top segments (global top N, plus the top 5 of each block for the views)
     top_segs = [s for s in segs if s["wrong"]][:top]
+    for name in bl:
+        top_segs += [s_ for s_ in segs if s_["block"] == name and s_["wrong"]][:5]
+    top_segs = [s_ for s_ in segs if s_ in top_segs]
     if top_segs:
         log("[headroom] building the open-item replay and the pipeline's payer identification ...")
         rp = hr_lib.Replay(run)
@@ -316,7 +334,7 @@ def render_md(R, top):
                   [[s["segment"], s["wrong"]] + [s["tax"][k] for k in "abcde"] for s in wrong_segs]
                   + [["**total**", R["wrong"]] + [sum(s["tax"][k] for s in wrong_segs) for k in "abcde"]])
     L += [""]
-    tops = [s for s in wrong_segs if "detail" in s][:top]
+    tops = [s for s in wrong_segs if "detail" in s][:top]  # the top N always have detail; lower ones only feed the block views
     L += [f"## 4. Detalle del top {len(tops)} por puntos", "",
           "Los ejemplos son bank_txn_id mal, uno de cada tipo de error por turnos, para `solution/tools/inspect_txn.py <run> <id>`. "
           "**Recuperabilidad** de cada movimiento fallado, con el pagador que identifica el propio pipeline (no el del golden; ver "
@@ -361,6 +379,32 @@ def render_md(R, top):
     return L
 
 
+def render_block(R, name):
+    b = R["blocks"][name]
+    gap = R["gap"]
+    segs = [s for s in R["segments"] if s["block"] == name and s["wrong"]]
+    cls = [c for c in R.get("classes", []) if c["block"] == name]
+    L = [f"# Headroom of run `{R['run']}` — bloque `{name}`", "",
+         f"- Score {R['score']:.2f}, faltan {gap:.2f} puntos. Este bloque: **{b['points_sum']:.2f}** puntos de segmentos "
+         f"({pct(b['points_sum'], gap)} del gap, suma de márgenes aislados), {b['wrong']} movimientos mal.",
+         f"- Segmentos del bloque: {len(b['segments'])}; clases: {', '.join(b['classes']) or 'ninguna'}. Mapa en `solution/tools/blocks.yaml` "
+         "(solo para informar; el pipeline no lo lee).", ""]
+    L += ["## Segmentos", ""]
+    L += md_table(["segmento", "movimientos", "accuracy", "mal", "puntos", "recuperables", "(a) pares", "(b) exc.", "(c) imp.", "(d) cat.", "(e) filas"],
+                  [[s["segment"], s["n"], f"{s['accuracy']:.3f}", s["wrong"], f"{s['points']:.2f}",
+                    f"{s['detail']['recoverable_points']:.2f}" if "detail" in s else "–"] + [s["tax"][k] for k in "abcde"] for s in segs]
+                  or [["(sin fallos)"] + [""] * 10])
+    L += ["", "## Clases de excepción", ""]
+    if cls:
+        L += md_table(["clase", "F1", "soporte", "puntos (filas)", "puntos (líneas)", "puntos a F1 0,9"],
+                      [[c["class"], f"{c['f1']:.3f}", c["support"], f"{c['points_rows']:.2f}", f"{c['points_lines']:.2f}",
+                        f"{c['points_to_f1_09']:.2f}"] for c in cls])
+    else:
+        L.append("(ninguna clase asignada a este bloque)")
+    L += [""]
+    return L
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run")
@@ -372,6 +416,14 @@ def main():
     out = a.out or os.path.join(hr_lib.ROOT, "notes", f"headroom_{R['run']}.md")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     open(out, "w", encoding="utf-8").write("\n".join(render_md(R, a.top)) + "\n")
+    stem = os.path.splitext(out)[0]
+    json.dump(R, open(stem + ".json", "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+    views = []
+    for name in R["blocks"]:
+        vp = f"{stem}_{name}.md"
+        open(vp, "w", encoding="utf-8").write("\n".join(render_block(R, name)) + "\n")
+        views.append(os.path.basename(vp))
+    print(f"[headroom] json: {stem}.json; views: {', '.join(views)}")
     print(f"[headroom] {R['run']}: score {R['score']:.2f}, gap {R['gap']:.2f}, sum of segment margins {R['sum_segment_points']:.2f} -> {out}")
 
 

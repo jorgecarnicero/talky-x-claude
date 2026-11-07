@@ -207,3 +207,42 @@ class PayerId:
                 if v:
                     return v, "nombre"
         return None, "sin pagador"
+
+
+# ------------------------------------------------------------------ blocks (reporting only)
+BLOCKS_FILE = os.path.join(HERE, "blocks.yaml")
+
+
+def load_blocks(path=None):
+    """blocks.yaml -> {block: {"segments": [patterns], "classes": [names]}} in file order. Minimal parser for the documented subset."""
+    blocks, cur, key = {}, None, None
+    for raw in open(path or BLOCKS_FILE, encoding="utf-8"):
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        ind = len(line) - len(line.lstrip())
+        body = line.strip()
+        if ind == 0 and body.endswith(":"):
+            cur = blocks.setdefault(body[:-1], {"segments": [], "classes": []})
+            key = None
+        elif ind > 0 and cur is not None and body.endswith(":"):
+            key = body[:-1]
+            cur.setdefault(key, [])
+        elif ind > 0 and cur is not None and key and body.startswith("- "):
+            cur[key].append(body[2:].strip())
+        elif ind > 0 and cur is not None and key and body == "[]":
+            pass
+        elif body.endswith("[]") and ":" in body:  # "classes: []"
+            cur.setdefault(body.split(":")[0].strip(), [])
+        else:
+            raise ValueError(f"blocks.yaml: cannot parse line {raw!r}")
+    return blocks
+
+
+def block_of(name, blocks, kind):
+    """first block whose `kind` ('segments' | 'classes') lists `name` (fnmatch globs allowed); else 'sin_bloque'"""
+    import fnmatch
+    for b, d in blocks.items():
+        if any(fnmatch.fnmatchcase(name, pat) for pat in d.get(kind, [])):
+            return b
+    return "sin_bloque"

@@ -1,0 +1,2452 @@
+{
+ "run": "v35",
+ "score": 92.87,
+ "gap": 7.1299999999999955,
+ "window": "2025-04-01..2025-05-31",
+ "dataset": "/Users/mateolarareguera/hackdata/data_dev",
+ "txns": 69553,
+ "wrong": 2626,
+ "oracle": 100.0,
+ "light": false,
+ "segments": [
+  {
+   "segment": "ar_ref_noise",
+   "n": 14940,
+   "wrong": 691,
+   "accuracy": 0.953748326639893,
+   "points": 1.5,
+   "tax": {
+    "a": 637,
+    "b": 3,
+    "c": 0,
+    "d": 0,
+    "e": 51
+   },
+   "block": "matching",
+   "detail": {
+    "kinds": {
+     "ambiguity": 557,
+     "recall": 134
+    },
+    "payer_how": {
+     "pipeline": 316,
+     "nombre": 278,
+     "sin pagador": 72,
+     "iban": 25
+    },
+    "payer_right": {
+     "identificado y correcto": 443,
+     "identificado y distinto del golden": 176,
+     "sin pagador": 72
+    },
+    "a_not_found": 373,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 373,
+      "lines": 373
+     },
+     {
+      "label": "ar:subset_dp_prim_m",
+      "wrong": 93,
+      "lines": 693
+     },
+     {
+      "label": "v3:ref_partial",
+      "wrong": 52,
+      "lines": 52
+     },
+     {
+      "label": "ar:subset_dp_prim_l",
+      "wrong": 43,
+      "lines": 60
+     },
+     {
+      "label": "ar:refplus_dp_prim_m",
+      "wrong": 19,
+      "lines": 109
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0092792",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "ar:var"
+     },
+     {
+      "txn": "BT-2025-0092889",
+      "type": "e",
+      "kind": "ambiguity",
+      "pass": "ar:subset_dp_prim_s"
+     },
+     {
+      "txn": "BT-2025-0112613",
+      "type": "b",
+      "kind": "recall",
+      "pass": "ar:dup_ref"
+     },
+     {
+      "txn": "BT-2025-0092949",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0093013",
+      "type": "e",
+      "kind": "ambiguity",
+      "pass": "ar:subset_pfx_prim"
+     }
+    ],
+    "difficulty": "alta",
+    "recall_fraction": 0.1939218523878437,
+    "recoverable_points": 0.2908827785817656,
+    "priority": 0.0727206946454414
+   }
+  },
+  {
+   "segment": "ar_overpayment",
+   "n": 135,
+   "wrong": 85,
+   "accuracy": 0.37037037037037035,
+   "points": 0.9699999999999989,
+   "tax": {
+    "a": 85,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones",
+   "detail": {
+    "kinds": {
+     "recall": 48,
+     "ambiguity": 37
+    },
+    "payer_how": {
+     "nombre": 60,
+     "sin pagador": 15,
+     "iban": 9,
+     "pipeline": 1
+    },
+    "payer_right": {
+     "identificado y correcto": 54,
+     "sin pagador": 15,
+     "identificado y distinto del golden": 16
+    },
+    "a_not_found": 84,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 84,
+      "lines": 84
+     },
+     {
+      "label": "v3:ref_partial",
+      "wrong": 1,
+      "lines": 1
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0094982",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0096576",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0096996",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0099340",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0099366",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     }
+    ],
+    "difficulty": "media",
+    "recall_fraction": 0.5647058823529412,
+    "recoverable_points": 0.5477647058823523,
+    "priority": 0.27388235294117613
+   }
+  },
+  {
+   "segment": "ar_1toN_credit_note",
+   "n": 1079,
+   "wrong": 360,
+   "accuracy": 0.6663577386468953,
+   "points": 0.8799999999999955,
+   "tax": {
+    "a": 209,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 151
+   },
+   "block": "matching",
+   "detail": {
+    "kinds": {
+     "recall": 244,
+     "ambiguity": 116
+    },
+    "payer_how": {
+     "pipeline": 230,
+     "nombre": 99,
+     "iban": 12,
+     "sin pagador": 19
+    },
+    "payer_right": {
+     "identificado y correcto": 323,
+     "identificado y distinto del golden": 18,
+     "sin pagador": 19
+    },
+    "a_not_found": 130,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 130,
+      "lines": 130
+     },
+     {
+      "label": "v3:ref_partial",
+      "wrong": 42,
+      "lines": 42
+     },
+     {
+      "label": "ar:subset_dp_prim_m",
+      "wrong": 34,
+      "lines": 149
+     },
+     {
+      "label": "ar:subset_dp_prim_l",
+      "wrong": 28,
+      "lines": 45
+     },
+     {
+      "label": "v3:ref_retention",
+      "wrong": 27,
+      "lines": 27
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0093358",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0092637",
+      "type": "e",
+      "kind": "recall",
+      "pass": "v3:ref_retention"
+     },
+     {
+      "txn": "BT-2025-0094102",
+      "type": "a",
+      "kind": "recall",
+      "pass": "ar:subset_dp_prim_l"
+     },
+     {
+      "txn": "BT-2025-0092711",
+      "type": "e",
+      "kind": "ambiguity",
+      "pass": "v3:party_comb3"
+     },
+     {
+      "txn": "BT-2025-0094381",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3:ref_partial"
+     }
+    ],
+    "difficulty": "baja",
+    "recall_fraction": 0.6777777777777778,
+    "recoverable_points": 0.5964444444444414,
+    "priority": 0.5964444444444414
+   }
+  },
+  {
+   "segment": "ar_short_dispute",
+   "n": 348,
+   "wrong": 71,
+   "accuracy": 0.7959770114942528,
+   "points": 0.7999999999999972,
+   "tax": {
+    "a": 71,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones",
+   "detail": {
+    "kinds": {
+     "recall": 56,
+     "ambiguity": 15
+    },
+    "payer_how": {
+     "nombre": 48,
+     "sin pagador": 11,
+     "pipeline": 9,
+     "iban": 3
+    },
+    "payer_right": {
+     "identificado y correcto": 59,
+     "sin pagador": 11,
+     "identificado y distinto del golden": 1
+    },
+    "a_not_found": 62,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 62,
+      "lines": 62
+     },
+     {
+      "label": "ar:subset_dp_prim_l",
+      "wrong": 6,
+      "lines": 6
+     },
+     {
+      "label": "ar:subset_dp_prim_m",
+      "wrong": 2,
+      "lines": 2
+     },
+     {
+      "label": "v3:party_bank_charges",
+      "wrong": 1,
+      "lines": 1
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0093274",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0093286",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0093640",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0094602",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0096749",
+      "type": "a",
+      "kind": "recall",
+      "pass": "ar:subset_dp_prim_l"
+     }
+    ],
+    "difficulty": "baja",
+    "recall_fraction": 0.7887323943661971,
+    "recoverable_points": 0.6309859154929555,
+    "priority": 0.6309859154929555
+   }
+  },
+  {
+   "segment": "ar_n_to_m",
+   "n": 600,
+   "wrong": 368,
+   "accuracy": 0.3866666666666667,
+   "points": 0.539999999999992,
+   "tax": {
+    "a": 357,
+    "b": 2,
+    "c": 0,
+    "d": 0,
+    "e": 9
+   },
+   "block": "matching",
+   "detail": {
+    "kinds": {
+     "ambiguity": 188,
+     "recall": 180
+    },
+    "payer_how": {
+     "nombre": 239,
+     "sin pagador": 46,
+     "pipeline": 57,
+     "iban": 26
+    },
+    "payer_right": {
+     "identificado y correcto": 273,
+     "sin pagador": 46,
+     "identificado y distinto del golden": 49
+    },
+    "a_not_found": 311,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 311,
+      "lines": 311
+     },
+     {
+      "label": "ar:subset_dp_prim_m",
+      "wrong": 24,
+      "lines": 25
+     },
+     {
+      "label": "ar:subset_dp_prim_l",
+      "wrong": 8,
+      "lines": 8
+     },
+     {
+      "label": "v3:ref_partial",
+      "wrong": 6,
+      "lines": 6
+     },
+     {
+      "label": "ar:refplus_dp_prim_m",
+      "wrong": 4,
+      "lines": 7
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0092933",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0108496",
+      "type": "e",
+      "kind": "recall",
+      "pass": "ar:refplus_dp_prim_s"
+     },
+     {
+      "txn": "BT-2025-0126118",
+      "type": "b",
+      "kind": "recall",
+      "pass": "v3:party_comb2"
+     },
+     {
+      "txn": "BT-2025-0092943",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0127605",
+      "type": "e",
+      "kind": "recall",
+      "pass": "v3:ref_overpay"
+     }
+    ],
+    "difficulty": "media",
+    "recall_fraction": 0.4891304347826087,
+    "recoverable_points": 0.2641304347826048,
+    "priority": 0.1320652173913024
+   }
+  },
+  {
+   "segment": "ar_1toN_text",
+   "n": 2048,
+   "wrong": 135,
+   "accuracy": 0.93408203125,
+   "points": 0.3399999999999892,
+   "tax": {
+    "a": 119,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 16
+   },
+   "block": "matching",
+   "detail": {
+    "kinds": {
+     "recall": 126,
+     "ambiguity": 9
+    },
+    "payer_how": {
+     "pipeline": 74,
+     "nombre": 44,
+     "iban": 3,
+     "sin pagador": 14
+    },
+    "payer_right": {
+     "identificado y correcto": 113,
+     "identificado y distinto del golden": 8,
+     "sin pagador": 14
+    },
+    "a_not_found": 61,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 61,
+      "lines": 61
+     },
+     {
+      "label": "ar:subset_dp_prim_l",
+      "wrong": 42,
+      "lines": 56
+     },
+     {
+      "label": "ar:ref_exact",
+      "wrong": 10,
+      "lines": 164
+     },
+     {
+      "label": "ar:subset_dp_prim_m",
+      "wrong": 9,
+      "lines": 52
+     },
+     {
+      "label": "ar:refplus_dp_prim_m",
+      "wrong": 8,
+      "lines": 78
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0092839",
+      "type": "a",
+      "kind": "recall",
+      "pass": "ar:subset_dp_prim_m"
+     },
+     {
+      "txn": "BT-2025-0092966",
+      "type": "e",
+      "kind": "recall",
+      "pass": "ar:refplus_dp_prim_m"
+     },
+     {
+      "txn": "BT-2025-0093130",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0093325",
+      "type": "e",
+      "kind": "recall",
+      "pass": "ar:ref_exact"
+     },
+     {
+      "txn": "BT-2025-0093307",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     }
+    ],
+    "difficulty": "baja",
+    "recall_fraction": 0.9333333333333333,
+    "recoverable_points": 0.31733333333332325,
+    "priority": 0.31733333333332325
+   }
+  },
+  {
+   "segment": "ar_fx",
+   "n": 263,
+   "wrong": 70,
+   "accuracy": 0.7338403041825095,
+   "points": 0.28000000000000114,
+   "tax": {
+    "a": 69,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 1
+   },
+   "block": "excepciones",
+   "detail": {
+    "kinds": {
+     "ambiguity": 41,
+     "recall": 29
+    },
+    "payer_how": {
+     "pipeline": 45,
+     "nombre": 14,
+     "sin pagador": 11
+    },
+    "payer_right": {
+     "identificado y correcto": 47,
+     "identificado y distinto del golden": 12,
+     "sin pagador": 11
+    },
+    "a_not_found": 22,
+    "passes": [
+     {
+      "label": "v3:party_exact",
+      "wrong": 25,
+      "lines": 58
+     },
+     {
+      "label": "v3rest:cat",
+      "wrong": 22,
+      "lines": 22
+     },
+     {
+      "label": "ar:subset_dp_prim_m",
+      "wrong": 9,
+      "lines": 14
+     },
+     {
+      "label": "ar:subset_dp_prim_l",
+      "wrong": 4,
+      "lines": 7
+     },
+     {
+      "label": "v3:party_duplicate",
+      "wrong": 3,
+      "lines": 3
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0092753",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3:party_exact"
+     },
+     {
+      "txn": "BT-2025-0142795",
+      "type": "e",
+      "kind": "recall",
+      "pass": "ar:refplus_dp_prim_s"
+     },
+     {
+      "txn": "BT-2025-0092995",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0093844",
+      "type": "a",
+      "kind": "recall",
+      "pass": "ar:subset_dp_prim_l"
+     },
+     {
+      "txn": "BT-2025-0093846",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3:party_exact"
+     }
+    ],
+    "difficulty": "media",
+    "recall_fraction": 0.4142857142857143,
+    "recoverable_points": 0.11600000000000048,
+    "priority": 0.05800000000000024
+   }
+  },
+  {
+   "segment": "ar_discount_late",
+   "n": 269,
+   "wrong": 86,
+   "accuracy": 0.6802973977695168,
+   "points": 0.1799999999999926,
+   "tax": {
+    "a": 84,
+    "b": 2,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones",
+   "detail": {
+    "kinds": {
+     "recall": 48,
+     "ambiguity": 38
+    },
+    "payer_how": {
+     "iban": 20,
+     "pipeline": 32,
+     "nombre": 34
+    },
+    "payer_right": {
+     "identificado y distinto del golden": 7,
+     "identificado y correcto": 79
+    },
+    "a_not_found": 54,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 54,
+      "lines": 54
+     },
+     {
+      "label": "ar:subset_dp_prim_m",
+      "wrong": 13,
+      "lines": 13
+     },
+     {
+      "label": "ar:subset_dp_prim_l",
+      "wrong": 8,
+      "lines": 8
+     },
+     {
+      "label": "ar:var",
+      "wrong": 6,
+      "lines": 10
+     },
+     {
+      "label": "ar:refplus_dp_prim_m",
+      "wrong": 3,
+      "lines": 3
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0093035",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0127559",
+      "type": "b",
+      "kind": "ambiguity",
+      "pass": "remittance"
+     },
+     {
+      "txn": "BT-2025-0093248",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "ar:var"
+     },
+     {
+      "txn": "BT-2025-0138072",
+      "type": "b",
+      "kind": "recall",
+      "pass": "remittance"
+     },
+     {
+      "txn": "BT-2025-0093450",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     }
+    ],
+    "difficulty": "media",
+    "recall_fraction": 0.5581395348837209,
+    "recoverable_points": 0.10046511627906564,
+    "priority": 0.05023255813953282
+   }
+  },
+  {
+   "segment": "ar_short_withholding",
+   "n": 491,
+   "wrong": 40,
+   "accuracy": 0.9185336048879837,
+   "points": 0.1700000000000017,
+   "tax": {
+    "a": 32,
+    "b": 2,
+    "c": 0,
+    "d": 0,
+    "e": 6
+   },
+   "block": "excepciones",
+   "detail": {
+    "kinds": {
+     "recall": 21,
+     "ambiguity": 19
+    },
+    "payer_how": {
+     "nombre": 12,
+     "sin pagador": 14,
+     "pipeline": 14
+    },
+    "payer_right": {
+     "identificado y correcto": 24,
+     "sin pagador": 14,
+     "identificado y distinto del golden": 2
+    },
+    "a_not_found": 26,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 26,
+      "lines": 26
+     },
+     {
+      "label": "v3:ref_partial",
+      "wrong": 7,
+      "lines": 7
+     },
+     {
+      "label": "ar:subset_dp_prim_m",
+      "wrong": 4,
+      "lines": 4
+     },
+     {
+      "label": "v3:party_exact",
+      "wrong": 1,
+      "lines": 1
+     },
+     {
+      "label": "ar:frac_partial",
+      "wrong": 1,
+      "lines": 1
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0094782",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0111567",
+      "type": "e",
+      "kind": "recall",
+      "pass": "v3:ref_partial"
+     },
+     {
+      "txn": "BT-2025-0139794",
+      "type": "b",
+      "kind": "recall",
+      "pass": "ar:frac_partial"
+     },
+     {
+      "txn": "BT-2025-0095307",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0113870",
+      "type": "e",
+      "kind": "recall",
+      "pass": "v3:ref_partial"
+     }
+    ],
+    "difficulty": "media",
+    "recall_fraction": 0.525,
+    "recoverable_points": 0.0892500000000009,
+    "priority": 0.04462500000000045
+   }
+  },
+  {
+   "segment": "ar_duplicate_payment",
+   "n": 228,
+   "wrong": 33,
+   "accuracy": 0.8552631578947368,
+   "points": 0.1700000000000017,
+   "tax": {
+    "a": 32,
+    "b": 1,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones",
+   "detail": {
+    "kinds": {
+     "impossible": 33
+    },
+    "payer_how": {
+     "nombre": 27,
+     "sin pagador": 5,
+     "pipeline": 1
+    },
+    "payer_right": {
+     "identificado y distinto del golden": 10,
+     "sin pagador": 5,
+     "identificado y correcto": 18
+    },
+    "a_not_found": 32,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 32,
+      "lines": 32
+     },
+     {
+      "label": "ar:ref_exact",
+      "wrong": 1,
+      "lines": 1
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0093138",
+      "type": "a",
+      "kind": "impossible",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0145274",
+      "type": "b",
+      "kind": "impossible",
+      "pass": "ar:ref_exact"
+     },
+     {
+      "txn": "BT-2025-0094261",
+      "type": "a",
+      "kind": "impossible",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0097156",
+      "type": "a",
+      "kind": "impossible",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0097393",
+      "type": "a",
+      "kind": "impossible",
+      "pass": "v3rest:cat"
+     }
+    ],
+    "difficulty": "alta",
+    "recall_fraction": 0.0,
+    "recoverable_points": 0.0,
+    "priority": 0.0
+   }
+  },
+  {
+   "segment": "ar_instalment",
+   "n": 1497,
+   "wrong": 171,
+   "accuracy": 0.8857715430861723,
+   "points": 0.14999999999999147,
+   "tax": {
+    "a": 23,
+    "b": 135,
+    "c": 0,
+    "d": 0,
+    "e": 13
+   },
+   "block": "pdfs",
+   "detail": {
+    "kinds": {
+     "ambiguity": 47,
+     "recall": 124
+    },
+    "payer_how": {
+     "pipeline": 161,
+     "nombre": 7,
+     "sin pagador": 3
+    },
+    "payer_right": {
+     "identificado y correcto": 159,
+     "identificado y distinto del golden": 9,
+     "sin pagador": 3
+    },
+    "a_not_found": 10,
+    "passes": [
+     {
+      "label": "v3:ref_partial",
+      "wrong": 58,
+      "lines": 750
+     },
+     {
+      "label": "v3:party_exact",
+      "wrong": 39,
+      "lines": 115
+     },
+     {
+      "label": "ar:pdf_partial",
+      "wrong": 22,
+      "lines": 276
+     },
+     {
+      "label": "v3:ref_exact",
+      "wrong": 21,
+      "lines": 284
+     },
+     {
+      "label": "ar:pdf_last",
+      "wrong": 11,
+      "lines": 52
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0093176",
+      "type": "b",
+      "kind": "recall",
+      "pass": "v3:ref_partial"
+     },
+     {
+      "txn": "BT-2025-0094135",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3:ref_partial"
+     },
+     {
+      "txn": "BT-2025-0092932",
+      "type": "e",
+      "kind": "ambiguity",
+      "pass": "ar:pdf_partial"
+     },
+     {
+      "txn": "BT-2025-0094243",
+      "type": "b",
+      "kind": "recall",
+      "pass": "v3:ref_partial"
+     },
+     {
+      "txn": "BT-2025-0099835",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3:party_cn_exact"
+     }
+    ],
+    "difficulty": "baja",
+    "recall_fraction": 0.7251461988304093,
+    "recoverable_points": 0.10877192982455522,
+    "priority": 0.10877192982455522
+   }
+  },
+  {
+   "segment": "ar_short_discount",
+   "n": 2355,
+   "wrong": 119,
+   "accuracy": 0.9494692144373673,
+   "points": 0.14999999999999147,
+   "tax": {
+    "a": 104,
+    "b": 12,
+    "c": 0,
+    "d": 0,
+    "e": 3
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "ap_fx",
+   "n": 411,
+   "wrong": 3,
+   "accuracy": 0.9927007299270073,
+   "points": 0.12999999999999545,
+   "tax": {
+    "a": 2,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 1
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "ar_same_amount_month",
+   "n": 1422,
+   "wrong": 45,
+   "accuracy": 0.9683544303797469,
+   "points": 0.11999999999999034,
+   "tax": {
+    "a": 43,
+    "b": 1,
+    "c": 0,
+    "d": 0,
+    "e": 1
+   },
+   "block": "pdfs",
+   "detail": {
+    "kinds": {
+     "ambiguity": 32,
+     "recall": 13
+    },
+    "payer_how": {
+     "sin pagador": 8,
+     "nombre": 15,
+     "pipeline": 22
+    },
+    "payer_right": {
+     "sin pagador": 8,
+     "identificado y distinto del golden": 24,
+     "identificado y correcto": 13
+    },
+    "a_not_found": 23,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 23,
+      "lines": 23
+     },
+     {
+      "label": "v3:party_exact",
+      "wrong": 7,
+      "lines": 165
+     },
+     {
+      "label": "v3:party_bank_charges",
+      "wrong": 6,
+      "lines": 6
+     },
+     {
+      "label": "v3:ref_partial",
+      "wrong": 3,
+      "lines": 3
+     },
+     {
+      "label": "ar:single",
+      "wrong": 2,
+      "lines": 130
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0093981",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0126060",
+      "type": "e",
+      "kind": "recall",
+      "pass": "ar:single"
+     },
+     {
+      "txn": "BT-2025-0139115",
+      "type": "b",
+      "kind": "recall",
+      "pass": "v3:party_duplicate"
+     },
+     {
+      "txn": "BT-2025-0094080",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0094141",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3:party_cn_exact"
+     }
+    ],
+    "difficulty": "alta",
+    "recall_fraction": 0.28888888888888886,
+    "recoverable_points": 0.03466666666666387,
+    "priority": 0.008666666666665967
+   }
+  },
+  {
+   "segment": "ap_confirming",
+   "n": 261,
+   "wrong": 41,
+   "accuracy": 0.842911877394636,
+   "points": 0.10999999999999943,
+   "tax": {
+    "a": 41,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching",
+   "detail": {
+    "kinds": {
+     "ambiguity": 41
+    },
+    "payer_how": {
+     "sin pagador": 40,
+     "pipeline": 1
+    },
+    "payer_right": {
+     "sin pagador": 40,
+     "identificado y distinto del golden": 1
+    },
+    "a_not_found": 40,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 40,
+      "lines": 40
+     },
+     {
+      "label": "batches:run",
+      "wrong": 1,
+      "lines": 168
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0108219",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0113600",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0115034",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0122339",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0123579",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     }
+    ],
+    "difficulty": "alta",
+    "recall_fraction": 0.0,
+    "recoverable_points": 0.0,
+    "priority": 0.0
+   }
+  },
+  {
+   "segment": "ar_1toN_remittance",
+   "n": 381,
+   "wrong": 11,
+   "accuracy": 0.9711286089238845,
+   "points": 0.0799999999999983,
+   "tax": {
+    "a": 11,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "pdfs",
+   "detail": {
+    "kinds": {
+     "ambiguity": 11
+    },
+    "payer_how": {
+     "iban": 2,
+     "nombre": 9
+    },
+    "payer_right": {
+     "identificado y correcto": 11
+    },
+    "a_not_found": 11,
+    "passes": [
+     {
+      "label": "v3rest:cat",
+      "wrong": 11,
+      "lines": 11
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0158890",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0159252",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0159669",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0160152",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     },
+     {
+      "txn": "BT-2025-0160322",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3rest:cat"
+     }
+    ],
+    "difficulty": "alta",
+    "recall_fraction": 0.0,
+    "recoverable_points": 0.0,
+    "priority": 0.0
+   }
+  },
+  {
+   "segment": "ar_same_amount_fifo",
+   "n": 2024,
+   "wrong": 82,
+   "accuracy": 0.9594861660079052,
+   "points": 0.060000000000002274,
+   "tax": {
+    "a": 82,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_dd_returned",
+   "n": 1214,
+   "wrong": 27,
+   "accuracy": 0.9777594728171335,
+   "points": 0.060000000000002274,
+   "tax": {
+    "a": 27,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "ar_replaced_invoice",
+   "n": 82,
+   "wrong": 25,
+   "accuracy": 0.6951219512195121,
+   "points": 0.04999999999999716,
+   "tax": {
+    "a": 19,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 6
+   },
+   "block": "pdfs",
+   "detail": {
+    "kinds": {
+     "recall": 20,
+     "ambiguity": 5
+    },
+    "payer_how": {
+     "nombre": 3,
+     "pipeline": 22
+    },
+    "payer_right": {
+     "identificado y correcto": 25
+    },
+    "a_not_found": 1,
+    "passes": [
+     {
+      "label": "v3:ref_retention",
+      "wrong": 5,
+      "lines": 5
+     },
+     {
+      "label": "v3:ref_fill_comb2",
+      "wrong": 4,
+      "lines": 5
+     },
+     {
+      "label": "v3:ref_partial",
+      "wrong": 4,
+      "lines": 4
+     },
+     {
+      "label": "v3:ref_overpay",
+      "wrong": 3,
+      "lines": 3
+     },
+     {
+      "label": "v3:ref_exact",
+      "wrong": 3,
+      "lines": 3
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0114257",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3:ref_duplicate"
+     },
+     {
+      "txn": "BT-2025-0130239",
+      "type": "e",
+      "kind": "recall",
+      "pass": "v3:ref_fill_comb2"
+     },
+     {
+      "txn": "BT-2025-0121698",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3:ref_retention"
+     },
+     {
+      "txn": "BT-2025-0145337",
+      "type": "e",
+      "kind": "recall",
+      "pass": "v3:ref_fill_comb2"
+     },
+     {
+      "txn": "BT-2025-0132230",
+      "type": "a",
+      "kind": "recall",
+      "pass": "v3:ref_retention"
+     }
+    ],
+    "difficulty": "baja",
+    "recall_fraction": 0.8,
+    "recoverable_points": 0.03999999999999773,
+    "priority": 0.03999999999999773
+   }
+  },
+  {
+   "segment": "ar_dd_represented_transfer",
+   "n": 311,
+   "wrong": 18,
+   "accuracy": 0.9421221864951769,
+   "points": 0.03999999999999204,
+   "tax": {
+    "a": 9,
+    "b": 9,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_retention",
+   "n": 304,
+   "wrong": 10,
+   "accuracy": 0.9671052631578947,
+   "points": 0.03999999999999204,
+   "tax": {
+    "a": 4,
+    "b": 6,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "pdfs",
+   "detail": {
+    "kinds": {
+     "recall": 5,
+     "ambiguity": 5
+    },
+    "payer_how": {
+     "pipeline": 9,
+     "nombre": 1
+    },
+    "payer_right": {
+     "identificado y correcto": 6,
+     "identificado y distinto del golden": 4
+    },
+    "a_not_found": 1,
+    "passes": [
+     {
+      "label": "v3:party_exact",
+      "wrong": 3,
+      "lines": 3
+     },
+     {
+      "label": "v3:party_withholding",
+      "wrong": 2,
+      "lines": 2
+     },
+     {
+      "label": "v3:ref_exact",
+      "wrong": 2,
+      "lines": 2
+     },
+     {
+      "label": "v3:party_prefix_due",
+      "wrong": 1,
+      "lines": 1
+     },
+     {
+      "label": "v3:ref_withholding",
+      "wrong": 1,
+      "lines": 1
+     }
+    ],
+    "examples": [
+     {
+      "txn": "BT-2025-0093850",
+      "type": "b",
+      "kind": "recall",
+      "pass": "v3:party_withholding"
+     },
+     {
+      "txn": "BT-2025-0108757",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3:party_prefix_due"
+     },
+     {
+      "txn": "BT-2025-0109805",
+      "type": "b",
+      "kind": "recall",
+      "pass": "v3:party_exact"
+     },
+     {
+      "txn": "BT-2025-0125862",
+      "type": "a",
+      "kind": "ambiguity",
+      "pass": "v3:party_exact"
+     },
+     {
+      "txn": "BT-2025-0113904",
+      "type": "b",
+      "kind": "recall",
+      "pass": "v3:ref_withholding"
+     }
+    ],
+    "difficulty": "baja",
+    "recall_fraction": 0.5,
+    "recoverable_points": 0.01999999999999602,
+    "priority": 0.01999999999999602
+   }
+  },
+  {
+   "segment": "unidentified",
+   "n": 1160,
+   "wrong": 9,
+   "accuracy": 0.9922413793103448,
+   "points": 0.03999999999999204,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 9,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_short_bank_charges",
+   "n": 51,
+   "wrong": 2,
+   "accuracy": 0.9607843137254902,
+   "points": 0.03999999999999204,
+   "tax": {
+    "a": 2,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "ar_partial",
+   "n": 1333,
+   "wrong": 36,
+   "accuracy": 0.972993248312078,
+   "points": 0.030000000000001137,
+   "tax": {
+    "a": 16,
+    "b": 18,
+    "c": 0,
+    "d": 0,
+    "e": 2
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "unidentified_lookalike",
+   "n": 478,
+   "wrong": 10,
+   "accuracy": 0.9790794979079498,
+   "points": 0.030000000000001137,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 10,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_advance_deduction",
+   "n": 113,
+   "wrong": 10,
+   "accuracy": 0.911504424778761,
+   "points": 0.030000000000001137,
+   "tax": {
+    "a": 5,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 5
+   },
+   "block": "pdfs"
+  },
+  {
+   "segment": "ar_third_party_confirming",
+   "n": 293,
+   "wrong": 17,
+   "accuracy": 0.9419795221843004,
+   "points": 0.01999999999999602,
+   "tax": {
+    "a": 17,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_dd_batch",
+   "n": 540,
+   "wrong": 5,
+   "accuracy": 0.9907407407407407,
+   "points": 0.01999999999999602,
+   "tax": {
+    "a": 0,
+    "b": 5,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_dispute_settlement",
+   "n": 373,
+   "wrong": 13,
+   "accuracy": 0.9651474530831099,
+   "points": 0.009999999999990905,
+   "tax": {
+    "a": 2,
+    "b": 11,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "ar_1to1",
+   "n": 6725,
+   "wrong": 10,
+   "accuracy": 0.9985130111524163,
+   "points": 0.009999999999990905,
+   "tax": {
+    "a": 8,
+    "b": 1,
+    "c": 0,
+    "d": 0,
+    "e": 1
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_third_party_agency",
+   "n": 123,
+   "wrong": 10,
+   "accuracy": 0.9186991869918699,
+   "points": 0.009999999999990905,
+   "tax": {
+    "a": 8,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 2
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_third_party_parent",
+   "n": 51,
+   "wrong": 3,
+   "accuracy": 0.9411764705882353,
+   "points": 0.009999999999990905,
+   "tax": {
+    "a": 2,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 1
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ap_duplicate_refund",
+   "n": 26,
+   "wrong": 2,
+   "accuracy": 0.9230769230769231,
+   "points": 0.009999999999990905,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 2,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "ap_factored",
+   "n": 477,
+   "wrong": 2,
+   "accuracy": 0.9958071278825996,
+   "points": 0.009999999999990905,
+   "tax": {
+    "a": 2,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "pdfs"
+  },
+  {
+   "segment": "ar_new_iban",
+   "n": 102,
+   "wrong": 1,
+   "accuracy": 0.9901960784313726,
+   "points": 0.009999999999990905,
+   "tax": {
+    "a": 1,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "pdfs"
+  },
+  {
+   "segment": "customer_refund",
+   "n": 126,
+   "wrong": 2,
+   "accuracy": 0.9841269841269842,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 2,
+    "e": 0
+   },
+   "block": "pdfs"
+  },
+  {
+   "segment": "ar_retention_release",
+   "n": 257,
+   "wrong": 1,
+   "accuracy": 0.9961089494163424,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 1,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "pdfs"
+  },
+  {
+   "segment": "ar_cheque_deposit",
+   "n": 675,
+   "wrong": 1,
+   "accuracy": 0.9985185185185185,
+   "points": 0.0,
+   "tax": {
+    "a": 1,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ap_payment_multi",
+   "n": 8323,
+   "wrong": 1,
+   "accuracy": 0.9998798510152589,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 1,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_card_settlement",
+   "n": 429,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ap_returned_transfer",
+   "n": 70,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "ap_supplier_refund",
+   "n": 877,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "nonitem_loan_repayment",
+   "n": 36,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_fx_deal",
+   "n": 58,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_bank_reversal",
+   "n": 80,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_leasing",
+   "n": 118,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_cash_pool",
+   "n": 524,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_bank_fees",
+   "n": 2298,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_intercompany",
+   "n": 135,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "customer_advance",
+   "n": 97,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "pdfs"
+  },
+  {
+   "segment": "nonitem_bank_fees_intl",
+   "n": 1018,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ap_direct_debit",
+   "n": 1846,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_card_chargeback",
+   "n": 12,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "nonitem_card_expenses",
+   "n": 29,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_cheque_returned",
+   "n": 26,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "nonitem_internal_transfer",
+   "n": 82,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_payroll",
+   "n": 163,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_insurance",
+   "n": 11,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ap_partial",
+   "n": 913,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "ap_payment_single",
+   "n": 5999,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ap_credit_note_netted",
+   "n": 894,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ap_duplicate_payment",
+   "n": 21,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "excepciones"
+  },
+  {
+   "segment": "ap_paid_by_holding",
+   "n": 1827,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_social_security",
+   "n": 34,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "nonitem_tax_payment",
+   "n": 42,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  },
+  {
+   "segment": "ar_credit_note_paid_out",
+   "n": 22,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "pdfs"
+  },
+  {
+   "segment": "ar_1to1_remittance",
+   "n": 2,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "pdfs"
+  },
+  {
+   "segment": "nonitem_loan_drawdown",
+   "n": 1,
+   "wrong": 0,
+   "accuracy": 1.0,
+   "points": 0.0,
+   "tax": {
+    "a": 0,
+    "b": 0,
+    "c": 0,
+    "d": 0,
+    "e": 0
+   },
+   "block": "matching"
+  }
+ ],
+ "sum_segment_points": 7.099999999999838,
+ "classes": [
+  {
+   "class": "OVERPAYMENT",
+   "f1": 0.5051,
+   "support": 135,
+   "pred_rows": 63,
+   "points_rows": 1.0699999999999932,
+   "points_lines": 1.0799999999999983,
+   "points_to_f1_09": 0.7898000000000001,
+   "small": false,
+   "block": "excepciones"
+  },
+  {
+   "class": "PARTIAL",
+   "f1": 0.8634,
+   "support": 4376,
+   "pred_rows": 4440,
+   "points_rows": 0.9200000000000017,
+   "points_lines": 1.4099999999999966,
+   "points_to_f1_09": 0.07320000000000015,
+   "small": false,
+   "block": "excepciones"
+  },
+  {
+   "class": "SHORT_DISPUTE",
+   "f1": 0.9198,
+   "support": 976,
+   "pred_rows": 831,
+   "points_rows": 0.769999999999996,
+   "points_lines": 0.8100000000000023,
+   "points_to_f1_09": 0.0,
+   "small": false,
+   "block": "excepciones"
+  },
+  {
+   "class": "FX_DIFFERENCE",
+   "f1": 0.8467,
+   "support": 5726,
+   "pred_rows": 6266,
+   "points_rows": 0.6499999999999915,
+   "points_lines": 0.7999999999999972,
+   "points_to_f1_09": 0.10660000000000003,
+   "small": false,
+   "block": "excepciones"
+  },
+  {
+   "class": "UNIDENTIFIED",
+   "f1": 0.7047,
+   "support": 1638,
+   "pred_rows": 2957,
+   "points_rows": 0.6400000000000006,
+   "points_lines": 4.459999999999994,
+   "points_to_f1_09": 0.39060000000000006,
+   "small": false,
+   "block": "matching"
+  },
+  {
+   "class": "SHORT_BANK_CHARGES",
+   "f1": 0.8,
+   "support": 52,
+   "pred_rows": 73,
+   "points_rows": 0.4099999999999966,
+   "points_lines": 0.4299999999999926,
+   "points_to_f1_09": 0.19999999999999996,
+   "small": true,
+   "block": "excepciones"
+  },
+  {
+   "class": "DUPLICATE_PAYMENT",
+   "f1": 0.8763,
+   "support": 249,
+   "pred_rows": 244,
+   "points_rows": 0.28000000000000114,
+   "points_lines": 0.29999999999999716,
+   "points_to_f1_09": 0.04740000000000011,
+   "small": false,
+   "block": "excepciones"
+  },
+  {
+   "class": "SHORT_DISCOUNT",
+   "f1": 0.9686,
+   "support": 5997,
+   "pred_rows": 5640,
+   "points_rows": 0.20999999999999375,
+   "points_lines": 0.28000000000000114,
+   "points_to_f1_09": 0.0,
+   "small": false,
+   "block": "excepciones"
+  },
+  {
+   "class": "SHORT_WITHHOLDING",
+   "f1": 0.9375,
+   "support": 1340,
+   "pred_rows": 1190,
+   "points_rows": 0.1700000000000017,
+   "points_lines": 0.1799999999999926,
+   "points_to_f1_09": 0.0,
+   "small": false,
+   "block": "excepciones"
+  },
+  {
+   "class": "RETURNED",
+   "f1": 0.9811,
+   "support": 1478,
+   "pred_rows": 1480,
+   "points_rows": 0.060000000000002274,
+   "points_lines": 0.060000000000002274,
+   "points_to_f1_09": 0.0,
+   "small": false,
+   "block": "excepciones"
+  }
+ ],
+ "macro_classes": 10,
+ "blocks": {
+  "pdfs": {
+   "segments": [
+    "ar_instalment",
+    "ar_same_amount_month",
+    "ar_1toN_remittance",
+    "ar_replaced_invoice",
+    "ar_retention",
+    "ar_advance_deduction",
+    "ap_factored",
+    "ar_new_iban",
+    "customer_refund",
+    "ar_retention_release",
+    "customer_advance",
+    "ar_credit_note_paid_out",
+    "ar_1to1_remittance"
+   ],
+   "classes": [],
+   "wrong": 278,
+   "points_sum": 0.48999999999995225
+  },
+  "excepciones": {
+   "segments": [
+    "ar_overpayment",
+    "ar_short_dispute",
+    "ar_fx",
+    "ar_discount_late",
+    "ar_short_withholding",
+    "ar_duplicate_payment",
+    "ar_short_discount",
+    "ap_fx",
+    "ar_dd_returned",
+    "ar_short_bank_charges",
+    "ar_partial",
+    "ar_dispute_settlement",
+    "ap_duplicate_refund",
+    "ap_returned_transfer",
+    "ap_supplier_refund",
+    "ar_card_chargeback",
+    "ar_cheque_returned",
+    "ap_partial",
+    "ap_duplicate_payment"
+   ],
+   "classes": [
+    "OVERPAYMENT",
+    "PARTIAL",
+    "SHORT_DISPUTE",
+    "FX_DIFFERENCE",
+    "SHORT_BANK_CHARGES",
+    "DUPLICATE_PAYMENT",
+    "SHORT_DISCOUNT",
+    "SHORT_WITHHOLDING",
+    "RETURNED"
+   ],
+   "wrong": 587,
+   "points_sum": 2.9999999999999574
+  },
+  "matching": {
+   "segments": [
+    "ar_ref_noise",
+    "ar_1toN_credit_note",
+    "ar_n_to_m",
+    "ar_1toN_text",
+    "ap_confirming",
+    "ar_same_amount_fifo",
+    "ar_dd_represented_transfer",
+    "unidentified",
+    "unidentified_lookalike",
+    "ar_third_party_confirming",
+    "ar_dd_batch",
+    "ar_1to1",
+    "ar_third_party_agency",
+    "ar_third_party_parent",
+    "ar_cheque_deposit",
+    "ap_payment_multi",
+    "ar_card_settlement",
+    "nonitem_loan_repayment",
+    "nonitem_fx_deal",
+    "nonitem_bank_reversal",
+    "nonitem_leasing",
+    "nonitem_cash_pool",
+    "nonitem_bank_fees",
+    "nonitem_intercompany",
+    "nonitem_bank_fees_intl",
+    "ap_direct_debit",
+    "nonitem_card_expenses",
+    "nonitem_internal_transfer",
+    "nonitem_payroll",
+    "nonitem_insurance",
+    "ap_payment_single",
+    "ap_credit_note_netted",
+    "ap_paid_by_holding",
+    "nonitem_social_security",
+    "nonitem_tax_payment",
+    "nonitem_loan_drawdown"
+   ],
+   "classes": [
+    "UNIDENTIFIED"
+   ],
+   "wrong": 1761,
+   "points_sum": 3.6099999999999284
+  }
+ }
+}

@@ -503,12 +503,18 @@ def main():
     ap.add_argument("--phase", required=True, choices=["sample", "train", "live", "final"])
     ap.add_argument("--only", choices=["ra", "pdf"])
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--force", action="store_true", help="re-extract even if the cache exists (train/live only skip)")
     a = ap.parse_args()
     os.makedirs(CACHE, exist_ok=True)
-    if a.only in (None, "ra"):
-        run_ra(a.data, a.phase, a.workers)
-    if a.only in (None, "pdf"):
-        run_pdf(a.data, a.phase, a.workers)
+    for kind, fn in (("ra", run_ra), ("pdf", run_pdf)):
+        if a.only not in (None, kind):
+            continue
+        out = os.path.join(CACHE, f"docs_{kind}_{a.phase}.parquet")
+        # train/live are immutable: reuse their cache. final/sample are always re-extracted (no stale partial cache).
+        if os.path.exists(out) and a.phase in ("train", "live") and not a.force:
+            print(f"{kind} {a.phase}: cache exists, skipping ({out})")
+            continue
+        fn(a.data, a.phase, a.workers)
 
 
 if __name__ == "__main__":

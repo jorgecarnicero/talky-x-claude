@@ -61,3 +61,16 @@ Produce the file from that branch (`python solution/bankrec.py --phase live --ou
 | ar_same_amount_month | 4,400 | 49 % |
 | ar_dd_represented_transfer / ar_dd_returned | 4,500 | 50–51 % |
 | ap_confirming | 850 | 53 % |
+
+## Candidate log (anti-overfitting gates, see notes/ANTI_OVERFIT.md)
+
+One row per candidate that reaches dev, **including the rejected and neutral ones**: the number of decisions taken on dev
+is the "k" that the method budgets for. Fill G1–G3 from `python solution/tools/significance.py TRUNK_SUB CAND_SUB --data …`.
+Sealed: run only for an ACEPTAR, read only the sign. LIVE: one full CSV per accepted candidate, never tune on it.
+
+| Date | Commit (branch) | Trunk commit | Env var | Dev gain (score / moves) | G1 c / b / z | G2 P+ / P− / p | G3 | G5 literals | Sealed sign | LIVE score (Δ) | Decision |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-11-07 | bc030cc (model/v6-excepciones) | 7506fc5 run `base` | – (always on) | 93.79 → 94.33 (+0.54) / +53 | 55 / 2 / 7.02 | 55 / 2 / 1e-14 | ok (Apr +25, May +28) | not recorded | not run | not recorded here | ACEPTAR (dev); merged in ea82675 |
+
+Decision values: `ACEPTAR` (G1–G3 pass, then G4–G6), `NEUTRO` (no evidence: stays on its branch with the env var at 0,
+no LIVE upload), `RECHAZAR` (significantly worse, or sealed/LIVE sign opposite to dev → revert / env var 0).

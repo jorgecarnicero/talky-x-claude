@@ -3,7 +3,7 @@
     python solution/tools/final_check.py --phase final --data ~/hackdata/data               # before the run
     python solution/tools/final_check.py --phase final --data ... --sub sub_final_final.csv.gz  # after it
 
-Checks: clean git tree + hash; solution/run_final.sh and solution/cascade.conf exist and equal run_v6b.sh's chain and
+Checks: clean git tree + hash; solution/run_final.sh and solution/cascade.conf exist and equal run_v6c.sh's chain and
 env + exc_overpay; masters_final has every table/column of masters/; pdftotext on PATH; PYTHONHASHSEED pinned; items
 loaded vs open_items_at_start (--skip-ledger to skip, loads the phase ~1 min); with --sub: src/validate_submission.py
 plus the share of UNIDENTIFIED lines per entity.
@@ -46,6 +46,8 @@ def v6b_chain(path):
     passes = re.search(r"--passes\s+(\S+)", s).group(1).split(",")
     env = dict(re.findall(r"\b([A-Z][A-Z_0-9]+)=(\S+)", " ".join(l for l in s.splitlines() if "pipeline.py" in l)))
     env.pop("V3_SUB", None)
+    # on by default in the v6c code, listed explicitly in cascade.conf; EXC_OVERPAY=1 is the exc_overpay switch
+    env.update({"AR_CNREL": "1", "AR_ZREF": "1", "MULTI_FX": "1", "EXC_OVERPAY": "1"})
     return passes, env
 
 
@@ -60,7 +62,7 @@ def main():
     st = git("status", "--porcelain")
     check("git tree clean", not st, f"HEAD {git('rev-parse', 'HEAD')}" + (f"; dirty: {len(st.splitlines())} paths" if st else ""))
     # 2. chain
-    rf, cc, v6 = (os.path.join(ROOT, p) for p in ("solution/run_final.sh", "solution/cascade.conf", "run_v6b.sh"))
+    rf, cc, v6 = (os.path.join(ROOT, p) for p in ("solution/run_final.sh", "solution/cascade.conf", "run_v6c.sh"))
     check("run_final.sh + cascade.conf exist", os.path.exists(rf) and os.path.exists(cc))
     if os.path.exists(cc) and os.path.exists(v6):
         kv = conf(cc)
@@ -69,13 +71,13 @@ def main():
         i = want.index("exc_fix") + 1
         want.insert(i, "exc_overpay")  # between exc_fix and cancel_guard
         got = kv.get("PASSES", "").split(",")
-        check("cascade.conf PASSES == run_v6b.sh + exc_overpay", got == want, "" if got == want else f"got {got} want {want}")
+        check("cascade.conf PASSES == run_v6c.sh + exc_overpay", got == want, "" if got == want else f"got {got} want {want}")
         got_env = {k: v for k, v in kv.items() if k != "PASSES"}
-        check("cascade.conf env == run_v6b.sh env", got_env == env, f"{got_env} vs {env}")
+        check("cascade.conf env == run_v6c.sh env", got_env == env, f"{got_env} vs {env}")
         s = open(rf, encoding="utf-8").read()
         check("run_final.sh reads cascade.conf and pins PYTHONHASHSEED=0", "cascade.conf" in s and "PYTHONHASHSEED=0" in s)
     else:
-        check("run_v6b.sh available for the chain comparison", False, v6)
+        check("run_v6c.sh available for the chain comparison", False, v6)
     # 3. masters_final
     import guards
     fin = os.path.join(a.data, "final", "masters_final")

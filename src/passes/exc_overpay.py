@@ -58,6 +58,9 @@ def payer_candidates(m, t):
 
 
 def run(ctx):
+    if os.environ.get("EXC_OVERPAY", "1") == "0":
+        print("    exc_overpay: disabled (EXC_OVERPAY=0)")
+        return
     from passes.exc_fix import opening
     m = ctx.cache.get("ar_matcher")
     if m is None:

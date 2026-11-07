@@ -24,6 +24,9 @@ FULL = ("", "SHORT_DISCOUNT", "SHORT_BANK_CHARGES", "SHORT_WITHHOLDING", "FX_DIF
 ENABLE = {"R1": True, "R2": True, "R3": True, "R4": True,
           "R5": os.environ.get("EXC_R5", "0") == "1"}   # R5 answers UNIDENTIFIED lines (outside the 'rewrite only' contract): lead decides
 ROUND_EXCESS_MAX = 100.0
+# review finding: R2 reverses deliberate policy readings of ar_match 'settle' (disputed remainder, no exception) and
+# ar_pdf instalments (out-of-order last instalment). EXC_R2_EXEMPT=1 skips R2 for those sources.
+R2_EXEMPT = os.environ.get("EXC_R2_EXEMPT", "0") == "1"
 
 
 def _tol(x):
@@ -125,7 +128,8 @@ def rewrite(bank, results, source, items, open0, pdf, stats=None):
                 bump("R3")
                 continue
         # R2 consistency of PARTIAL / ''
-        if ENABLE["R2"]:
+        r2_exempt = R2_EXEMPT and (src == "ar:settle" or src.startswith("ar_pdf_"))
+        if ENABLE["R2"] and not r2_exempt:
             if e == "PARTIAL" and abs(c - o) <= tl:
                 r["exception"], r["amount"] = "", round(o, 2)
                 bump("R2_to_empty")

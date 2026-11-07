@@ -1,0 +1,8 @@
+# Scoped ablation (user, 2026-11-07): the three enabled flags + BP_KMAX one step each side, TUNE, checkpointed.
+flag_AR_DUST0 AR_DUST=0
+flag_EXC_R5_0 EXC_R5=0
+flag_PAYER_DIR0 PAYER_DIR=0
+const_BP_KMAX2 BP_KMAX=2
+const_BP_KMAX4 BP_KMAX=4
+# robustness: 25 % of customers hidden from the learned payer directory
+unseen25 UNSEEN_FRAC=0.25

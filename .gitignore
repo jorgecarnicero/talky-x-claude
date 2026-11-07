@@ -29,3 +29,7 @@ __pycache__/
 # macOS metadata from the extracted archives
 ._*
 .DS_Store
+Hackathon*/
+data*/
+*.csv.gz
+*.zip

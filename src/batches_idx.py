@@ -21,15 +21,22 @@ class BIdx:
     def __init__(self, ctx):
         it = ctx.items
         self.ctx = ctx
-        self.typ = dict(zip(it.item_id, it.item_type.astype(str)))
-        self.ent = dict(zip(it.item_id, it.entity.astype(str)))
-        self.party = dict(zip(it.item_id, it.party_id))
-        self.pname = dict(zip(it.item_id, it.party_name))
-        self.total = dict(zip(it.item_id, it.total))
-        self.issue = dict(zip(it.item_id, it.issue_date))
-        self.due = dict(zip(it.item_id, it.due_date))
-        self.cur = dict(zip(it.item_id, it.currency.astype(str)))
-        self.doc = dict(zip(it.item_id, it.doc_number))
+        # PERF: materialise columns once as Python lists; zip() over Arrow-backed pandas columns fetches element by
+        # element (~100M slow calls on TRAIN). Same values, same order.
+        ids = it.item_id.tolist()
+        typ = it.item_type.astype(str).tolist()
+        ent = it.entity.astype(str).tolist()
+        party = it.party_id.tolist()
+        pname = it.party_name.tolist()
+        self.typ = dict(zip(ids, typ))
+        self.ent = dict(zip(ids, ent))
+        self.party = dict(zip(ids, party))
+        self.pname = dict(zip(ids, pname))
+        self.total = dict(zip(ids, it.total.tolist()))
+        self.issue = dict(zip(ids, it.issue_date.tolist()))
+        self.due = dict(zip(ids, it.due_date.tolist()))
+        self.cur = dict(zip(ids, it.currency.astype(str).tolist()))
+        self.doc = dict(zip(ids, it.doc_number.tolist()))
         self.doc_idx = defaultdict(list)       # norm(doc) -> items
         self.dig_idx = defaultdict(list)       # last 6 digits of doc -> items
         self.party_items = defaultdict(list)
@@ -40,7 +47,7 @@ class BIdx:
         except Exception:  # noqa: BLE001
             ndocs = docs.map(norm)
         dgs = docs.str.replace(r"\D", "", regex=True).str[-4:]
-        for iid, n, dg, p in zip(it.item_id, ndocs, dgs, it.party_id):
+        for iid, n, dg, p in zip(ids, ndocs.tolist(), dgs.tolist(), party):
             if n:
                 self.doc_idx[n].append(iid)
             if len(dg) == 4:
@@ -59,7 +66,7 @@ class BIdx:
                 for nm in (getattr(r, "name", ""), getattr(r, "trade_name", "")):
                     if nm:
                         self.cust_name[(r.entity, norm(nm))].add(r.customer_id)
-        for iid, e, p, nm in zip(it.item_id, it.entity.astype(str), it.party_id, it.party_name):
+        for iid, e, p, nm in zip(ids, ent, party, pname):
             if self.typ[iid] == "ARI" and nm:
                 self.cust_name[(e, norm(nm))].add(p)
 

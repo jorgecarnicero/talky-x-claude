@@ -44,6 +44,47 @@ def _days(a, b):
         return 9999
 
 
+class LazyGroups:
+    """PERF: dict-like {key: DataFrame of the group's rows}, built on first access from groupby positions.
+    Equivalent to {k: g for k, g in df.groupby(col, sort=False)} (same rows, order and index labels) without
+    materialising every group up front (~250k payment-run end-to-end groups on TRAIN)."""
+
+    def __init__(self, df, col):
+        self.df = df
+        self.pos = df.groupby(col, sort=False).indices if len(df) else {}
+        self._c = {}
+
+    def get(self, k, default=None):
+        if k not in self.pos:
+            return default
+        g = self._c.get(k)
+        if g is None:
+            ps = self.pos[k]
+            a, b = int(ps[0]), int(ps[-1])
+            # contiguous rows (the usual case): zero-copy slice; take() on Arrow columns costs ~9 ms per call
+            g = self.df.iloc[a:b + 1] if b - a + 1 == len(ps) else self.df.take(ps)
+            self._c[k] = g
+        return g
+
+    def __getitem__(self, k):
+        g = self.get(k)
+        if g is None:
+            raise KeyError(k)
+        return g
+
+    def __contains__(self, k):
+        return k in self.pos
+
+    def __iter__(self):
+        return iter(self.pos)
+
+    def __len__(self):
+        return len(self.pos)
+
+    def keys(self):
+        return self.pos.keys()
+
+
 class Batches:
     def __init__(self, ctx):
         self.ctx = ctx
@@ -118,18 +159,23 @@ class Batches:
                 if ib:
                     self.sup_iban[norm(ib)].add(sid)
         # payment runs
-        self.run_rows, self.e2e_rows, self.run_type = {}, defaultdict(list), {}
+        self.run_rows, self.e2e_rows, self.run_type = {}, {}, {}
         self.tr_by_acc_amt = defaultdict(list)
         if len(self.runs) and {"run_id", "document_number"} <= set(self.runs.columns):
-            for rid, g in self.runs.groupby("run_id", sort=False):
-                self.run_rows[rid] = g
-                self.run_type[rid] = _s(g["run_type"].iloc[0]).lower() if "run_type" in g else "transfers"
-            if "end_to_end_id" in self.runs.columns:
-                for e2e, g in self.runs.groupby("end_to_end_id", sort=False):
-                    self.e2e_rows[e2e] = g
-                    r0 = g.iloc[0]
-                    if self.run_type.get(r0["run_id"]) == "transfers":
-                        self.tr_by_acc_amt[(_s(r0.get("debtor_account_id")), round(float(r0["transfer_amount"]), 2))].append(e2e)
+            runs = self.runs
+            self.run_rows = LazyGroups(runs, "run_id")
+            first = runs.drop_duplicates("run_id", keep="first")
+            rts = first["run_type"].tolist() if "run_type" in runs.columns else ["transfers"] * len(first)
+            for rid, rt in zip(first["run_id"].tolist(), rts):
+                self.run_type[rid] = _s(rt).lower() if "run_type" in runs.columns else "transfers"
+            if "end_to_end_id" in runs.columns:
+                self.e2e_rows = LazyGroups(runs, "end_to_end_id")
+                f = runs.drop_duplicates("end_to_end_id", keep="first")
+                acc = f["debtor_account_id"].tolist() if "debtor_account_id" in f.columns else [""] * len(f)
+                for e2e, rid, a, ta in zip(f["end_to_end_id"].tolist(), f["run_id"].tolist(), acc,
+                                           f["transfer_amount"].tolist()):
+                    if self.run_type.get(rid) == "transfers":
+                        self.tr_by_acc_amt[(_s(a), round(float(ta), 2))].append(e2e)
 
     def _same_acc(self, g, acc, col):
         """Ids (run/batch/deposit) are not unique across entities: keep rows of this bank account (or entity)."""

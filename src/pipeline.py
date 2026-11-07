@@ -16,9 +16,10 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import guards  # noqa: E402
 from data import DEFAULT_DATA, Ctx  # noqa: E402
 
-PASS_ORDER = ["batches", "remittance", "ap_match", "nonitem", "ar_multi", "ar_pdf", "v3import", "ar_match", "ar_multi_late", "ar_bigpool", "ar_dispute", "v3rest", "exc_fix", "cancel_guard"]
+PASS_ORDER = ["batches", "remittance", "ap_match", "nonitem", "ar_multi", "ar_pdf", "v3import", "ar_match", "ar_multi_late", "ar_bigpool", "ar_dispute", "v3rest", "exc_fix", "exc_overpay", "cancel_guard"]
 
 
 def fallback(ctx):
@@ -61,6 +62,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--sources", help="optional csv: bank_txn_id,source pass (diagnostics)")
     a = ap.parse_args()
+    guards.check_all(a.data, a.phase)
     t0 = time.time()
     ctx = Ctx(a.data, a.phase, a.dfrom, a.dto)
     print(f"loaded {len(ctx.bank)} bank lines, {len(ctx.items)} items, {len(ctx.open)} open  [{time.time()-t0:.0f}s]", flush=True)

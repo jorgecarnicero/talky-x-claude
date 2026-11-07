@@ -75,5 +75,10 @@ def write(out_dir, info, base_dir, cand_dir, data_dir, base, cand, label, why, d
     for k, v in cand.get("classes", {}).items():
         bf = base.get("classes", {}).get(k, {}).get("f1", 0.0)
         L.append(f"| {k} | {v['support']}{' (poco fiable)' if v['support'] < 100 else ''} | {bf:.3f} | {v['f1']:.3f} | {v['f1'] - bf:+.3f} |")
+    try:  # remaining headroom of the top 5 after the change (diagnostic: a failure here never changes the verdict)
+        import headroom
+        L += headroom.remaining_top(base_dir, cand_dir, data_dir, 5, log=lambda *a: None)
+    except Exception as ex:  # noqa: BLE001
+        L += ["", "## Margen restante tras el cambio", "", f"(no disponible: {type(ex).__name__}: {ex})", ""]
     open(os.path.join(out_dir, "informe.md"), "w", encoding="utf-8").write("\n".join(L) + "\n")
     return len(good_to_bad), len(bad_to_good)

@@ -142,8 +142,13 @@ def difficulty(tax, kinds):
 
 
 # ------------------------------------------------------------------ the computation
-def compute(run_name, data=None, top=10, light=False, log=print):
-    """Everything the report needs, as a JSON-serialisable dict. light=True: segment points only (no classes, no detail)."""
+LEVELS = {"segments": 0, "classes": 1, "full": 2}
+
+
+def compute(run_name, data=None, top=10, level="full", log=print):
+    """Everything the report needs, as a JSON-serialisable dict.
+    level: 'segments' = segment points only; 'classes' = + exception classes and blocks; 'full' = + recoverability / detail."""
+    light = level == "segments"
     run = hr_lib.Run(run_name, data)
     golden, pred, why = run.golden, run.pred, run.why
     base = read_raw(os.path.join(run.dir, "sub.csv.gz"))
@@ -170,8 +175,8 @@ def compute(run_name, data=None, top=10, light=False, log=print):
                      "tax": {k: tax.get(k, 0) for k in "abcde"}})
     segs.sort(key=lambda r: (-r["points"], -r["wrong"]))
 
-    out = {"run": run.name, "score": score0, "gap": 100 - score0, "window": run.res["meta"].get("window"), "dataset": run.D,
-           "txns": N, "wrong": len(wrong), "oracle": oracle, "light": light, "segments": segs,
+    out = {"run": run.name, "level": level, "score": score0, "gap": 100 - score0, "window": run.res["meta"].get("window"),
+           "dataset": run.D, "txns": N, "wrong": len(wrong), "oracle": oracle, "light": light, "segments": segs,
            "sum_segment_points": sum(s["points"] for s in segs)}
     if light:
         return out
@@ -208,6 +213,9 @@ def compute(run_name, data=None, top=10, light=False, log=print):
             bl[name] = {"segments": [s_["segment"] for s_ in bs], "classes": [c_["class"] for c_ in bc],
                         "wrong": sum(s_["wrong"] for s_ in bs), "points_sum": sum(s_["points"] for s_ in bs)}
     out["blocks"] = bl
+
+    if level == "classes":
+        return out
 
     # ---- detail of the top segments (global top N, plus the top 5 of each block for the views)
     top_segs = [s for s in segs if s["wrong"]][:top]
@@ -257,6 +265,73 @@ def compute(run_name, data=None, top=10, light=False, log=print):
             "difficulty": dif, "recall_fraction": frac, "recoverable_points": s["points"] * frac,
             "priority": s["points"] * frac * EASE[dif]}
     return out
+
+
+def cached(run_name, level="segments", data=None, log=print):
+    """compute() with a cache in dev_runs/<run>/headroom_cache.json (valid while result.json's score and sub.csv.gz are unchanged)."""
+    d = hr_lib.run_dir_of(run_name)
+    cp = os.path.join(d, "headroom_cache.json")
+    stamp = [json.load(open(os.path.join(d, "result.json")))["score"], os.path.getmtime(os.path.join(d, "sub.csv.gz"))]
+    if os.path.exists(cp):
+        try:
+            c = json.load(open(cp))
+            if c.get("stamp") == stamp and LEVELS[c["data"]["level"]] >= LEVELS[level]:
+                return c["data"]
+        except (ValueError, KeyError):
+            pass
+    R = compute(run_name, data, level=level, log=log)
+    json.dump({"stamp": stamp, "data": R}, open(cp, "w"))
+    return R
+
+
+def compare_md(A, B):
+    """margin movement per segment and class between two runs (negative = margin shrank = improvement)"""
+    L = [f"# Headroom: `{A['run']}` → `{B['run']}`", "",
+         f"- Score {A['score']:.2f} → {B['score']:.2f} ({B['score'] - A['score']:+.2f}); margen total {A['gap']:.2f} → {B['gap']:.2f}; "
+         f"movimientos mal {A['wrong']} → {B['wrong']} ({B['wrong'] - A['wrong']:+d}).",
+         "- Δ = puntos de margen de B − puntos de margen de A: **negativo = el margen se redujo** (mejora). Margen = lo que sube el "
+         "score al sustituir ese segmento/clase por el golden (scorer oficial, ver `headroom.py`).", ""]
+    sa = {s["segment"]: s for s in A["segments"]}
+    sb = {s["segment"]: s for s in B["segments"]}
+    rows = []
+    for k in set(sa) | set(sb):
+        pa, pb = sa.get(k, {}).get("points", 0.0), sb.get(k, {}).get("points", 0.0)
+        wa, wb = sa.get(k, {}).get("wrong", 0), sb.get(k, {}).get("wrong", 0)
+        if abs(pb - pa) >= 0.005 or wa != wb:
+            rows.append((pb - pa, k, pa, pb, wa, wb))
+    rows.sort()
+    L += ["## Segmentos que se movieron", ""]
+    L += md_table(["segmento", "margen A", "margen B", "Δ margen", "mal A", "mal B", "Δ mal"],
+                  [[k, f"{pa:.2f}", f"{pb:.2f}", f"{d:+.2f}", wa, wb, f"{wb - wa:+d}"] for d, k, pa, pb, wa, wb in rows]
+                  or [["(ninguno)"] + [""] * 6])
+    L += ["", f"Suma de Δ por segmento: {sum(r[0] for r in rows):+.2f}.", ""]
+    if "classes" in A and "classes" in B:
+        ca = {c["class"]: c for c in A["classes"]}
+        cb = {c["class"]: c for c in B["classes"]}
+        L += ["## Clases de excepción", ""]
+        L += md_table(["clase", "F1 A", "F1 B", "Δ F1", "margen filas A", "margen filas B", "Δ margen"],
+                      [[k, f"{ca[k]['f1']:.3f}", f"{cb[k]['f1']:.3f}", f"{cb[k]['f1'] - ca[k]['f1']:+.3f}",
+                        f"{ca[k]['points_rows']:.2f}", f"{cb[k]['points_rows']:.2f}",
+                        f"{cb[k]['points_rows'] - ca[k]['points_rows']:+.2f}"]
+                       for k in sorted(ca, key=lambda k: cb[k]["points_rows"] - ca[k]["points_rows"]) if k in cb])
+        L += [""]
+    return L
+
+
+def remaining_top(base_run, cand_run, data=None, n=5, log=print):
+    """markdown lines: the n largest remaining margins of the candidate, next to the baseline's (used by test_branch's informe.md)"""
+    B = cached(base_run, "segments", data, log)
+    C = cached(cand_run, "segments", data, log)
+    sb = {s["segment"]: s for s in B["segments"]}
+    L = ["", f"## Margen restante tras el cambio (top {n} por puntos del candidato)", "",
+         f"Puntos que aún subiría el score al corregir cada segmento (scorer oficial, `solution/tools/headroom.py`). "
+         f"Margen total: baseline {B['gap']:.2f} → candidato {C['gap']:.2f} ({C['gap'] - B['gap']:+.2f}).", ""]
+    L += md_table(["segmento", "margen candidato", "margen baseline", "Δ", "mal candidato", "mal baseline"],
+                  [[s["segment"], f"{s['points']:.2f}", f"{sb.get(s['segment'], {}).get('points', 0.0):.2f}",
+                    f"{s['points'] - sb.get(s['segment'], {}).get('points', 0.0):+.2f}", s["wrong"],
+                    sb.get(s["segment"], {}).get("wrong", 0)] for s in C["segments"][:n]])
+    L += [""]
+    return L
 
 
 # ------------------------------------------------------------------ markdown
@@ -407,11 +482,26 @@ def render_block(R, name):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("run")
+    ap.add_argument("run", nargs="+", help="a run; with --compare: two runs A B")
+    ap.add_argument("--compare", action="store_true", help="show how the margin per segment and class moved from run A to run B")
     ap.add_argument("--data", default=None, help="dev dataset dir (default: the one recorded in result.json)")
     ap.add_argument("--top", type=int, default=10, help="segments in the detailed sections (default 10)")
-    ap.add_argument("--out", default=None, help="output file (default notes/headroom_<run>.md)")
+    ap.add_argument("--out", default=None, help="output file (default notes/headroom_<run>.md, or notes/headroom_compare_A_vs_B.md)")
     a = ap.parse_args()
+    if a.compare:
+        if len(a.run) != 2:
+            sys.exit("--compare needs exactly two runs: headroom.py --compare A B")
+        A, B = (cached(r, "classes", a.data) for r in a.run)
+        L = compare_md(A, B)
+        out = a.out or os.path.join(hr_lib.ROOT, "notes", f"headroom_compare_{A['run']}_vs_{B['run']}.md")
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        open(out, "w", encoding="utf-8").write("\n".join(L) + "\n")
+        print("\n".join(L))
+        print(f"[headroom] -> {out}")
+        return
+    if len(a.run) != 1:
+        sys.exit("give one run (or --compare A B)")
+    a.run = a.run[0]
     R = compute(a.run, a.data, a.top)
     out = a.out or os.path.join(hr_lib.ROOT, "notes", f"headroom_{R['run']}.md")
     os.makedirs(os.path.dirname(out), exist_ok=True)

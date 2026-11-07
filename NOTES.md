@@ -29,3 +29,14 @@
 v3.5 LIVE 91.92 vs committed-code local 92.82 (gap 0.90; v3 gap 0.58; an earlier dev run gave 92.49) -> generalises, no sign of overfitting.
 Reproduce: `./run_v35.sh live` (runs team v3, docs extraction, our pipeline, validator).
 | 12:27 | sub_live_v35_final (rebuilt from pushed model/v3.5) | – | 92.82 | **91.92** (reproduced) |
+
+## v4 (13:30) — held-out 2025-04..05 (no agent tuned on it), same v3 input
+| config | score | exc macro-F1 |
+|---|---|---|
+| v3.5 base (current code) | 92.83 | 0.837 |
+| + exc_fix R1-R4 | 92.95 | 0.839 |
+| + exc_fix R5 (unreferenced overpayment) | 93.27 | 0.855 |
+| v4 = + ar_multi, ar_pdf, ar_multi_late, cancel_guard, exc_fix (no R5, no payer_dir) | 93.22 | 0.845 |
+| **v4 + R5 + payer_dir** | **93.57** | 0.861 |
+Tune window 2024-10..11 gains per agent: ar_pdf +0.15, exc_fix +0.15 (+0.33 R5), ar_multi +0.12, ar_match rules +0.02.
+Remaining biggest bucket: ~1,360 receipts per 2 months left UNIDENTIFIED though golden has items (payer known for ~500, no amount combo found).

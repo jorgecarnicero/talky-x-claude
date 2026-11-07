@@ -62,9 +62,32 @@ def main():
     ap.add_argument("--sources", help="optional csv: bank_txn_id,source pass (diagnostics)")
     a = ap.parse_args()
     t0 = time.time()
-    ctx = Ctx(a.data, a.phase, a.dfrom, a.dto)
+    passes = [p for p in a.passes.split(",") if p]
+    # Optional checkpoint (PIPE_CKPT=1, see checkpoint.py): the passes before PIPE_CKPT_UNTIL (default v3import)
+    # are snapshotted once and skipped on later runs whose key (code, flags, window, docs caches) is identical.
+    ck_path, ck_payload, prefix, start = None, None, [], 0
+    if os.environ.get("PIPE_CKPT") == "1":
+        until = os.environ.get("PIPE_CKPT_UNTIL", "v3import")
+        if until in passes and passes.index(until) > 0:
+            import checkpoint
+            from data import CACHE
+            prefix = passes[:passes.index(until)]
+            key, ck_payload = checkpoint.make_key(a, prefix, CACHE)
+            ck_path = checkpoint.path_for(CACHE, key)
+        else:
+            print(f"  checkpoint: off (pass {until} not in --passes)")
+    if ck_path and os.path.exists(ck_path):
+        ctx = checkpoint.load(ck_path)
+        start = len(prefix)
+        ck_path = None   # nothing to save
+    else:
+        ctx = Ctx(a.data, a.phase, a.dfrom, a.dto)
     print(f"loaded {len(ctx.bank)} bank lines, {len(ctx.items)} items, {len(ctx.open)} open  [{time.time()-t0:.0f}s]", flush=True)
-    for name in [p for p in a.passes.split(",") if p]:
+    for k, name in enumerate(passes):
+        if k < start:
+            continue
+        if ck_path and k == len(prefix):
+            checkpoint.save(ctx, ck_path, ck_payload)
         try:
             mod = importlib.import_module(f"passes.{name}")
         except ModuleNotFoundError as e:

@@ -84,9 +84,13 @@ def find_month(words):
     return None
 
 
+def _no_rates():
+    return ([], [])
+
+
 class FX:
     def __init__(self, df):
-        self.r = defaultdict(lambda: ([], []))
+        self.r = defaultdict(_no_rates)   # named function instead of a lambda: picklable (pipeline checkpoints)
         d = df.sort_values("date")
         for cur, g in d.groupby("currency"):
             self.r[cur] = (list(g.date), [float(x) for x in g.units_per_eur])

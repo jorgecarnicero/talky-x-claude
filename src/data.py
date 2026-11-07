@@ -7,6 +7,7 @@ import os
 import re
 import unicodedata
 from collections import defaultdict
+from functools import lru_cache
 
 import pandas as pd
 
@@ -28,21 +29,40 @@ ITEM_COLS = ["item_id", "item_type", "entity", "party_id", "party_name", "doc_nu
 
 
 # ---------------------------------------------------------------- text helpers
-def strip_accents(s):
+# PERF: pure functions called millions of times on the same strings (profile: 2.2M calls, ~30 s on a 2-month window).
+# Results for str inputs are memoised; anything else follows the original code path unchanged.
+def _strip_accents_impl(s):
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+
+
+_strip_accents_cached = lru_cache(maxsize=1 << 20)(_strip_accents_impl)
+
+
+def strip_accents(s):
+    return _strip_accents_cached(s) if type(s) is str else _strip_accents_impl(s)
+
+
+@lru_cache(maxsize=1 << 20)
+def _norm_str(s):
+    return re.sub(r"[^A-Z0-9]", "", _strip_accents_cached(s).upper())
+
+
+@lru_cache(maxsize=1 << 20)
+def _norm_words_str(s):
+    return re.sub(r"[^A-Z0-9]+", " ", _strip_accents_cached(s).upper()).strip()
 
 
 def norm(s):
     """Upper-case alnum only, accents removed. 'Ré-25/001' -> 'RE25001'."""
     if not isinstance(s, str):
         return ""
-    return re.sub(r"[^A-Z0-9]", "", strip_accents(s).upper())
+    return _norm_str(s) if type(s) is str else re.sub(r"[^A-Z0-9]", "", strip_accents(s).upper())
 
 
 def norm_words(s):
     if not isinstance(s, str):
         return ""
-    return re.sub(r"[^A-Z0-9]+", " ", strip_accents(s).upper()).strip()
+    return _norm_words_str(s) if type(s) is str else re.sub(r"[^A-Z0-9]+", " ", strip_accents(s).upper()).strip()
 
 
 def full_text(t):

@@ -7,7 +7,7 @@ PHASE=${1:?usage: solution/run_final.sh live|final}
 cd "$(dirname "$0")/.."
 PY=${PY:-.venv/bin/python}
 export PYTHONHASHSEED=0
-set -a; . <(grep -E '^[A-Z_0-9]+=' solution/cascade.conf); set +a   # PASSES, EXC_R5, PAYER_DIR
+set -a; eval "$(grep -E "^[A-Z_0-9]+=" solution/cascade.conf)"; set +a   # PASSES, EXC_R5, PAYER_DIR
 case $PHASE in live) CHAIN="train live";; final) CHAIN="train live final";; *) echo "phase must be live|final"; exit 1;; esac
 DATA_ARG=(); [ -n "${BANKREC_DATA:-}" ] && DATA_ARG=(--data "$BANKREC_DATA")
 if [ -z "${V3_BACKBONE:-}" ]; then

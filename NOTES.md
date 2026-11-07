@@ -24,3 +24,7 @@
 - Mine beats v3 on: ap_payment_multi/single (96->100 %), ap_direct_debit (88->100), cheques (83->100), dd_batch (84->99),
   ap_fx (81->99), ap_factored, dd_returned, supplier refunds, cn netted. ~1,234 more correct lines in the window.
 - Window 2025-04..05 was never used for tuning by any agent (they tuned on 2024H2) -> fair out-of-sample comparison.
+| 12:05 | v3.5 = batches,remittance,ap_match,nonitem,**v3import**,ar_match(snapshot),v3rest | – | 92.49 (2025-04..05) | **91.92** |
+
+v3.5 LIVE 91.92 vs local 92.49 (gap 0.57, same as v3's 0.58) -> generalises, no sign of overfitting.
+Reproduce: `./run_v35.sh live` (runs team v3, docs extraction, our pipeline, validator).

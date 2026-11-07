@@ -13,6 +13,7 @@ PATTERNS = [
     r"ACH CREDIT (.+?) CCD",
     r"DIRECT CREDIT (.+?)(?:  | INV| PAYMENT|$)",
     r"TT IN (.+?)(?: INV| SERVICE| PAYMENT|$)",
+    r"EFT CREDIT (.+?)(?: INV\b| INVOICE| PAYMENT| PROFORMA| PF\d| REF\b|  |$)",
     r"^FP (.+?)(?: PAYMENT| INV|$)",
     r"TRANSFERENCIAS (.+?)(?: \||$)",
     r"TRANSFERENCIA DE (.+?)(?: \| CONCEPTO|$)",

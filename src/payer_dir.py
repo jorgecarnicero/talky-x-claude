@@ -48,6 +48,12 @@ def build(ctx):
     return d
 
 
+def unseen(pid, frac):
+    """Deterministic customer split for the unseen-customer test (same customers in every run)."""
+    import zlib
+    return zlib.crc32(str(pid).encode()) % 1000 < frac * 1000
+
+
 def apply(ctx, ix):
     """Add learned IBANs / name aliases to an ar_index.ARIndex."""
     try:
@@ -56,8 +62,9 @@ def apply(ctx, ix):
         print(f"   payer_dir: skipped ({e})")
         return
     n_ib = n_nm = 0
-    for kind, ent, key, pid in d.itertuples(index=False):
-        if pid not in ix.cust:
+    frac = float(os.environ.get("UNSEEN_FRAC", "0") or 0)  # robustness test only (docs/PROTOCOL.md): hide a fixed
+    for kind, ent, key, pid in d.itertuples(index=False):   # hash-selected share of customers from the learned table
+        if pid not in ix.cust or (frac and unseen(pid, frac)):
             continue
         if kind == "iban":
             if pid not in ix.iban[key]:

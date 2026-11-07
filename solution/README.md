@@ -51,6 +51,20 @@ python solution/tools/dev_acceptance.py                # harness self-tests (ora
 precision / recall / F1, "(n pequeño)" if < 50 cases), `failures_<segment>.csv` (every wrong bank line: text, golden, prediction,
 which matcher produced it). Exception classes with < 100 golden rows are flagged as unreliable. The dataset layout is documented in `make_dev_dataset.py`; do not use the `segment` column in rules.
 
+## Headroom: where the remaining points are (diagnostic, never feeds the pipeline)
+
+```
+python solution/tools/headroom.py v35 [--live live_segments.csv]   # notes/headroom_v35.{md,json} + one view per block (matching / excepciones / pdfs)
+python solution/tools/headroom.py --compare v35 my-idea            # how the margin per segment / class moved, top-5 overlap
+python solution/tools/inspect_txn.py v35 BT-2025-0092792           # one bank line: golden, prediction, pass, open items of the payer the pipeline identified
+python solution/tools/inspect_txn.py v35 --segment ar_overpayment --worst 5
+```
+
+Margin = points the official score rises when a segment (or exception class) is replaced by the golden, re-scored with the official
+scorer (exact). Recoverability (recall / ambiguity / impossible) uses the payer the pipeline identifies, not the golden's. The
+segment -> block map is `solution/tools/blocks.yaml` (reporting only). `test_branch` informes end with the remaining margin of the top 5.
+`live_segments.csv` (`segment,accuracy`) adds an "acc LIVE" column and flags segments where LIVE is > 3 points below dev.
+
 ### Test a teammate's branch with one command
 
 ```

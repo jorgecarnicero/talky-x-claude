@@ -59,6 +59,7 @@ def main():
     ap.add_argument("--to", dest="dto")
     ap.add_argument("--passes", default=",".join(PASS_ORDER))
     ap.add_argument("--out", required=True)
+    ap.add_argument("--sources", help="optional csv: bank_txn_id,source pass (diagnostics)")
     a = ap.parse_args()
     t0 = time.time()
     ctx = Ctx(a.data, a.phase, a.dfrom, a.dto)
@@ -76,6 +77,9 @@ def main():
     fallback(ctx)
     print(f"  fallback        {len(ctx.results)-before:7d}")
     n = write(ctx, a.out)
+    if a.sources:
+        with open(a.sources, "w") as fh:
+            fh.write("bank_txn_id,source\n" + "".join(f"{t},{s}\n" for t, s in ctx.source.items()))
     print(f"wrote {a.out}  [{time.time()-t0:.0f}s total]")
 
 

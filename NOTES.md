@@ -28,3 +28,18 @@
 
 v3.5 LIVE 91.92 vs local 92.49 (gap 0.57, same as v3's 0.58) -> generalises, no sign of overfitting.
 Reproduce: `./run_v35.sh live` (runs team v3, docs extraction, our pipeline, validator).
+
+## v5 (branch model/v5-on-v35, on top of aryan/matcher 4fd75ec)
+Windows: tune 2024-10..11, confirm 2025-02..03 (2025-02..03 was never tuned on by any agent).
+
+| change | 2024-10..11 | 2025-02..03 |
+|---|---|---|
+| v3.5 fed with team v4 answers WITHOUT PDF clauses (V3_SUB) | – | 93.58 |
+| v3.5 fed with team v4 answers WITH PDF clauses (model/v4-pdfs b4bb2af) | 93.34 | **93.69** (replaced 24 -> 95 %, advance 92 -> 98 %) |
+| + ar_match step 6 `prefix_partial`, first version (listed refs + oldest-first) | 92.99 (rejected: oldest-first 4/880 correct, precision 98.4 -> 95.5) | – |
+| + step 6 tightened: >= 2 exact refs, all but the LAST listed fully covered, last one PARTIAL | 93.38 (16 fixed / 0 broken) | **93.74** (n_to_m 40 -> 44 %) |
+
+- Setup note: docs_extract.py needs PyMuPDF (`pip install pymupdf`), missing from the README install line;
+  without it every PDF / PDF advice is silently skipped (all clause columns empty).
+- ar_n_to_m on TRAIN: always ONE customer; several invoices in full + the last listed one PARTIAL. Without references
+  the order is not oldest-first (that variant is useless), so unreferenced n_to_m lines remain open.

@@ -1,3 +1,4 @@
+import os
 """AR receipts by transfer: identify the payer, parse references, explain the amount over the customer's open items.
 
 See POLICIES §3, §5. No labels used. Order: lines are processed chronologically (ledger FIFO).
@@ -19,6 +20,9 @@ ZERO_UNITS = True
 SUBSET_ALL = False
 DP_MAX_POOL = 80
 FRACTIONS = (0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 0.95)
+STRICT_WEAK = True
+STRICT_GAP = 0.3
+SETTLE_WORDS = {"SETTLEMENT", "REGULARIZACION", "REGULARISATION", "REGOLARIZZAZIONE", "REGULARIZACAO"}
 INST_RE = re.compile(r"(?<![\d/])(\d{1,2})\s?/\s?(\d{1,2})(?![\d/])")
 
 PARTIAL_WORDS = {"CUENTA", "ACOMPTE", "ACCONTO", "PARTIAL", "TEILZAHLUNG", "ABSCHLAG", "PARCIAL", "INSTALMENT",
@@ -38,6 +42,9 @@ class Matcher:
     def __init__(self, ctx):
         self.ctx = ctx
         self.ix = ARIndex(ctx)
+        if os.environ.get("PAYER_DIR", "0") == "1":
+            import payer_dir
+            payer_dir.apply(ctx, self.ix)
         self.open = ctx.open
         self.acct_ccy = dict(zip(ctx.masters["bank_accounts"].account_id, ctx.masters["bank_accounts"].currency))
         self.stats = defaultdict(int)
@@ -280,8 +287,14 @@ class Matcher:
             k, n = int(m.group(1)), int(m.group(2))
             if 1 <= k <= n <= 24 and n >= 2:
                 self.inst = (k, n)
+        top = max(cand.values())
         for cid in order:
-            res = self.try_customer(cid, t, A, ccy, bdate, toks, grefs, month, cand[cid], strict="group" in why[cid] and len(why[cid]) == 1)
+            weak = "group" in why[cid] and len(why[cid]) == 1
+            # weaker name-only candidate (lookalike legal form / truncated name) while a better-identified customer
+            # exists: only accept exact evidence (referenced set or single exact invoice), no combinatorial guesses
+            if not weak and STRICT_WEAK and not (why[cid] & {"ref", "iban"}) and cand[cid] < top - STRICT_GAP:
+                weak = True
+            res = self.try_customer(cid, t, A, ccy, bdate, toks, grefs, month, cand[cid], strict=weak)
             if res:
                 return res
         self.stats["cand_nomatch"] += 1
@@ -414,6 +427,13 @@ class Matcher:
         it = self.ix.item
         op = self.open
         ctry = getattr(self.ix.cust.get(cid), "country", "") or ""
+        # --- settlement of a previously disputed remainder ("SETTLEMENT FA24...", "REGULARIZACION ..."):
+        # the cited invoice gets the cash with no exception (POLICIES §3), whatever our ledger still shows open
+        if R and self.words_set & SETTLE_WORDS:
+            Ri = [i for i in R if it[i][0] == "ARI" and refs.get(i, 0) >= 2]
+            if len(Ri) == 1 and self.sv(Ri[0]) > A + tol:
+                i = Ri[0]
+                return self.rows_for([i], A, fx, {i: ""}, {i: A}), "settle"
         if self.p_inst or self.p_ret or self.p_adv:
             r = self.pdf_partial(O, R, A, tol, fx)
             if r:

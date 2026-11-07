@@ -15,6 +15,7 @@ Produce the file from that branch (`python solution/bankrec.py --phase live --ou
 | v2 | `model/v2` | 80.66 | 77.73 | **77.00** | 84.7 % (97.8 / 74.6) | 83.6 % | 48.0 % | + oldest-due subset search, FX in item currency, confirming = latest due on a business day, txt-advice fix |
 | v3 | `model/v3` | 85.28 | 82.90 | **82.25** | 85.4 % (98.3 / 75.4) | 87.4 % | 66.8 % | block A + quick block B (see below) |
 | v3.5 | `model/v3.5` | – | 92.82 | **91.92** | 94.2 % (98.5 / 90.3) dev | 95.7 % dev | 83.3 % dev | v3 + high-precision passes (batches, remittance, AP, non-item) + AR matcher on v3's unidentified receipts — see docs/V35.md |
+| v4-cascade | `model/v4-cascade` | – | 93.57 | **92.67** | 94.0 % (98.0 / 90.3) | 95.8 % | 84.7 % | v3.5 + ar_pdf, ar_multi, exc_fix (+R5), cancel_guard, payer_dir — see docs/V4.md |
 | v4 | `model/v4-pdfs` | – | – | – | | | | work in progress: document PDFs (block C) |
 
 ### v3 changes (dev 77.73 → 82.90; alloc F1 85.8 → 86.6, txn acc 84.0 → 87.3, exception F1 48.2 → 67.1)

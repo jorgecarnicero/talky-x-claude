@@ -113,15 +113,34 @@ def load_bank(root, ph):
 
 
 def load_masters(root, phase):
-    mdir = os.path.join(root, "masters")
+    """masters/ overlaid (file by file) with final/masters_final/ for FINAL — works whether masters_final is complete
+    or only holds the changed files."""
+    dirs = [os.path.join(root, "masters")]
     fm = os.path.join(root, "final", "masters_final")
     if phase == "final" and os.path.isdir(fm):
-        mdir = fm
+        dirs.append(fm)
     m = {}
-    for f in os.listdir(mdir):
-        if f.endswith(".csv"):
-            m[f[:-4]] = _read(os.path.join(mdir, f))
+    for mdir in dirs:
+        for f in os.listdir(mdir):
+            if f.endswith(".csv"):
+                m[f[:-4]] = _read(os.path.join(mdir, f))
     return m
+
+
+def _items_from_open(root, phase_dir, known):
+    """Rows for items that exist only in open_items_at_start (e.g. balances of an acquired subsidiary)."""
+    p = os.path.join(phase_dir, "open_items_at_start.csv.gz")
+    if not os.path.exists(p):
+        return None
+    oi = _read(p)
+    oi = oi[~oi.item_id.isin(known)]
+    if not len(oi):
+        return None
+    return pd.DataFrame({
+        "item_id": oi.item_id, "item_type": oi.item_type, "entity": oi.entity, "party_id": oi.party_id,
+        "party_name": "", "doc_number": oi.document_number, "issue_date": oi.issue_date, "due_date": oi.due_date,
+        "currency": oi.currency, "total": oi.total_amount.astype(float), "payment_terms": "", "po": "",
+        "payment_method": "", "related_document": "", "reason": ""})[ITEM_COLS]
 
 
 # ---------------------------------------------------------------- context
@@ -144,6 +163,11 @@ class Ctx:
         self.masters = load_masters(root, phase)
         items = pd.concat([load_items(root, p) for p in chain], ignore_index=True)
         items = items.drop_duplicates("item_id", keep="last")
+        if phase in ("live", "final"):
+            extra = _items_from_open(root, self.phase_dir, set(items.item_id))
+            if extra is not None:
+                print(f"  + {len(extra)} open items known only from open_items_at_start", flush=True)
+                items = pd.concat([items, extra], ignore_index=True)
         bank = load_bank(root, phase)
         if dfrom:
             bank = bank[bank.booking_date >= dfrom]

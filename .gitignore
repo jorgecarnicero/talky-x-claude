@@ -1,0 +1,22 @@
+# Hackathon data (1GB+) — never commit
+data/
+*.csv.gz
+*.tar.gz
+*.zip
+pdfs/
+
+# Outputs
+out/
+submissions/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS / secrets
+.DS_Store
+.env
+*.token

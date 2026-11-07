@@ -1,0 +1,31 @@
+# ---- hackathon data: every teammate extracts the archives locally (see solution/README.md)
+/train/
+/live/
+/final/
+/sample/
+/masters/
+/bankrec-*/
+*.tar.gz
+*.zip
+
+# CSV data (raw, gzipped and submissions)
+*.csv
+*.csv.gz
+*.CSV
+
+# raw data formats, in case they appear elsewhere
+*.pdf
+*.xlsx
+*.n43
+*.sta
+*.xml
+
+# local environment / caches
+.venv/
+solution/cache/
+__pycache__/
+*.pyc
+
+# macOS metadata from the extracted archives
+._*
+.DS_Store

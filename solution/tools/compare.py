@@ -2,8 +2,9 @@
 
     python solution/tools/compare.py <baseline> <candidate>      # run names under dev_runs/ (or paths to run folders)
 
-ACCEPT iff the overall score goes up AND no segment that the baseline gets >90 % right drops by more than 0.5 points
-(accuracy points, i.e. 0.005). Exit code 0 = ACCEPT, 1 = REJECT. Also lists the biggest segment movements.
+ACEPTAR iff the overall score goes up AND no segment that the baseline gets >90 % right drops by more than 0.5 points
+(accuracy points, i.e. 0.005); NEUTRO if the score is unchanged and nothing protected drops; else RECHAZAR.
+Exit code 0 = ACEPTAR, 3 = NEUTRO, 1 = RECHAZAR. Also lists the biggest segment movements.
 """
 import argparse
 import json
@@ -20,6 +21,25 @@ def load(x):
         return json.load(fh)
 
 
+def verdict(b, c):
+    """('ACEPTAR' | 'NEUTRO' | 'RECHAZAR', reasons, protected-segment violations)"""
+    deltas = []
+    for s, ab in b["segments"].items():
+        ac = c["segments"].get(s, 0.0)
+        deltas.append((ac - ab, s, ab, ac))
+    deltas.sort()
+    viol = [(d, s, ab, ac) for d, s, ab, ac in deltas if ab > HIGH and -d > MAX_DROP + 1e-12]
+    why = [f"segment {s} (>90 %) dropped {-100 * d:.2f} pts" for d, s, ab, ac in viol]
+    delta = round(c["score"] - b["score"], 2)
+    if delta > 0 and not viol:
+        return "ACEPTAR", [], deltas
+    if delta == 0 and not viol:
+        return "NEUTRO", ["score unchanged"], deltas
+    if delta <= 0:
+        why.insert(0, "overall score did not go up" if delta == 0 else f"overall score went down ({delta:+.2f})")
+    return "RECHAZAR", why, deltas
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("baseline")
@@ -28,7 +48,6 @@ def main():
     b, c = load(a.baseline), load(a.candidate)
     if b["meta"].get("window") != c["meta"].get("window"):
         sys.exit(f"different windows: {b['meta'].get('window')} vs {c['meta'].get('window')}")
-    up = c["score"] > b["score"]
     print(f"score {b['score']:.2f} -> {c['score']:.2f}  ({c['score'] - b['score']:+.2f})")
     for k in ("allocation_f1", "txn_accuracy", "exception_macro_f1"):
         print(f"  {k:20s} {b['metrics'][k]:.4f} -> {c['metrics'][k]:.4f}  ({c['metrics'][k] - b['metrics'][k]:+.4f})")
@@ -37,28 +56,15 @@ def main():
         bf = b.get("classes", {}).get(k, {}).get("f1", 0.0)
         flag = "   (poco fiable: n<100)" if v["support"] < 100 else ""
         print(f"  {k:20s} {bf:.3f} -> {v['f1']:.3f}  ({v['f1'] - bf:+.3f})  n={v['support']}{flag}")
-    deltas = []
-    for s, ab in b["segments"].items():
-        ac = c["segments"].get(s)
-        if ac is None:
-            ac = 0.0
-        deltas.append((ac - ab, s, ab, ac))
-    deltas.sort()
-    viol = [(d, s, ab, ac) for d, s, ab, ac in deltas if ab > HIGH and -d > MAX_DROP + 1e-12]
+    label, why, deltas = verdict(b, c)
     print("\nlargest drops:")
     for d, s, ab, ac in deltas[:6]:
         print(f"  {s:34s} {ab:.3f} -> {ac:.3f}  ({100 * d:+.1f} pts){'   <-- protected segment' if ab > HIGH else ''}")
     print("largest gains:")
     for d, s, ab, ac in deltas[::-1][:6]:
         print(f"  {s:34s} {ab:.3f} -> {ac:.3f}  ({100 * d:+.1f} pts)")
-    ok = up and not viol
-    why = []
-    if not up:
-        why.append("overall score did not go up")
-    for d, s, ab, ac in viol:
-        why.append(f"segment {s} (>90 %) dropped {-100 * d:.2f} pts")
-    print("\n" + ("ACCEPT" if ok else "REJECT: " + "; ".join(why)))
-    sys.exit(0 if ok else 1)
+    print("\n" + label + ("" if not why else ": " + "; ".join(why)))
+    sys.exit({"ACEPTAR": 0, "NEUTRO": 3, "RECHAZAR": 1}[label])
 
 
 if __name__ == "__main__":

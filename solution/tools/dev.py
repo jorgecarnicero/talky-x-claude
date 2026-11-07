@@ -25,7 +25,15 @@ from datetime import date
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-sys.path.insert(0, os.path.join(ROOT, "starter"))
+sys.path.insert(0, os.path.join(ROOT, "starter"))  # the scorer always comes from the harness checkout
+# CODE = checkout whose pipeline code (solution/bankrec.py, src/) is run; default = this checkout. test_branch.py points it
+# at a worktree of the branch under test while the harness (this file, scorer, dataset builder) stays the trusted one.
+_pre = argparse.ArgumentParser(add_help=False)
+_pre.add_argument("--code-root")
+_pre.add_argument("--runs-dir")
+_k, _ = _pre.parse_known_args()
+CODE = os.path.abspath(_k.code_root) if _k.code_root else ROOT
+RUNS = os.path.abspath(_k.runs_dir) if _k.runs_dir else os.path.join(ROOT, "dev_runs")
 import bankrec_score as S  # noqa: E402
 
 DEFAULT = ("2025-04-01", "2025-05-31")
@@ -41,7 +49,7 @@ def overlaps(a, b):
 
 def git(*args):
     try:
-        return subprocess.run(["git", "-C", ROOT, *args], capture_output=True, text=True).stdout.strip()
+        return subprocess.run(["git", "-C", CODE, *args], capture_output=True, text=True).stdout.strip()
     except OSError:
         return ""
 
@@ -79,7 +87,7 @@ def run_pipeline(d, run_dir, fresh):
     os.makedirs(run_dir, exist_ok=True)
     sub, why = os.path.join(run_dir, "sub.csv.gz"), os.path.join(run_dir, "why.csv")
     t0 = time.time()
-    r = subprocess.run([sys.executable, os.path.join(ROOT, "solution", "bankrec.py"), "--phase", "live", "--data", d,
+    r = subprocess.run([sys.executable, os.path.join(CODE, "solution", "bankrec.py"), "--phase", "live", "--data", d,
                         "--out", sub, "--why", why],
                        env={**os.environ, "PYTHONHASHSEED": "0"})  # the matcher iterates over sets: pin the hash order
     if r.returncode:
@@ -101,13 +109,13 @@ def run_v35(d, run_dir, fresh):
     py = sys.executable
     t0 = time.time()
     v3_sub, v3_why = os.path.join(run_dir, "sub_v3.csv.gz"), os.path.join(run_dir, "why_v3.csv")
-    steps = [[py, os.path.join(ROOT, "solution", "bankrec.py"), "--phase", "live", "--data", d, "--out", v3_sub, "--why", v3_why]]
+    steps = [[py, os.path.join(CODE, "solution", "bankrec.py"), "--phase", "live", "--data", d, "--out", v3_sub, "--why", v3_why]]
     for ph in ("train", "live"):
         for kind in ("ra", "pdf"):
             if not os.path.exists(os.path.join(cache, f"docs_{kind}_{ph}.parquet")):
-                steps.append([py, os.path.join(ROOT, "src", "docs_extract.py"), "--data", d, "--phase", ph, "--only", kind])
+                steps.append([py, os.path.join(CODE, "src", "docs_extract.py"), "--data", d, "--phase", ph, "--only", kind])
     sub, src = os.path.join(run_dir, "sub.csv.gz"), os.path.join(run_dir, "sources.csv")
-    steps.append([py, os.path.join(ROOT, "src", "pipeline.py"), "--data", d, "--phase", "live", "--passes", V35_PASSES,
+    steps.append([py, os.path.join(CODE, "src", "pipeline.py"), "--data", d, "--phase", "live", "--passes", V35_PASSES,
                   "--sources", src, "--out", sub])
     for st in steps:
         e = {**env, "V3_SUB": v3_sub}
@@ -293,6 +301,12 @@ def score(d, sub_path, run_dir, why_path=None, meta=None):
             for t in sorted(ts):
                 i = info.get(t, ("", "", "", "", ""))
                 w.writerow([t, i[0], i[1], i[2], i[3], i[4], fmt_g(golden.txns[t]), fmt_p(pred.get(t)), why.get(t, "")])
+    with open(os.path.join(run_dir, "wrong.csv"), "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["bank_txn_id", "segment"])
+        for k, ts in seg_fail.items():
+            for t in sorted(ts):
+                w.writerow([t, k])
     cls = class_stats(golden, pred)
     with open(os.path.join(run_dir, "classes.csv"), "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, list(cls[0]))
@@ -332,6 +346,8 @@ def score(d, sub_path, run_dir, why_path=None, meta=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--code-root", default=None, help="checkout whose pipeline code is run (default: this one)")
+    ap.add_argument("--runs-dir", default=None, help="where dev_runs/<name>/ is written (default: <repo>/dev_runs)")
     ap.add_argument("--name", default=None, help="run name (default: current git branch)")
     ap.add_argument("--start", default=DEFAULT[0])
     ap.add_argument("--end", default=DEFAULT[1])
@@ -339,7 +355,7 @@ def main():
     ap.add_argument("--out", default=None, help="dataset directory (default: ~/hackdata/data_dev*, one per window); "
                     "use your own to run a different window in parallel without touching data_dev")
     ap.add_argument("--src", default=os.path.expanduser("~/hackdata/data"), help="extracted hackathon data (train/, masters/)")
-    ap.add_argument("--engine", choices=["v35", "v3"], default="v35" if os.path.exists(os.path.join(ROOT, "src", "pipeline.py")) else "v3",
+    ap.add_argument("--engine", choices=["v35", "v3"], default="v35" if os.path.exists(os.path.join(CODE, "src", "pipeline.py")) else "v3",
                     help="v35 = solution/bankrec.py + src/pipeline.py passes (as run_v35.sh); v3 = solution/bankrec.py alone")
     ap.add_argument("--rebuild", action="store_true", help="rebuild the dev dataset")
     ap.add_argument("--fresh", action="store_true", help="delete the pipeline caches (PDF advices, items, category model)")
@@ -351,7 +367,7 @@ def main():
     if a.sealed and (a.start, a.end) != DEFAULT:
         sys.exit("--sealed fixes the window; do not combine with --start/--end")
     name = re.sub(r"[^A-Za-z0-9_.-]", "_", a.name or git("rev-parse", "--abbrev-ref", "HEAD") or "run")
-    run_dir = os.path.join(ROOT, "dev_runs", name)
+    run_dir = os.path.join(RUNS, name)
     os.makedirs(run_dir, exist_ok=True)
     d = dataset_dir(start, end, a.sealed, a.out)
     win = ensure_dataset(d, start, end, a.src, a.rebuild)

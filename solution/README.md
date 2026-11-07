@@ -51,6 +51,21 @@ python solution/tools/dev_acceptance.py                # harness self-tests (ora
 precision / recall / F1, "(n pequeño)" if < 50 cases), `failures_<segment>.csv` (every wrong bank line: text, golden, prediction,
 which matcher produced it). Exception classes with < 100 golden rows are flagged as unreliable. The dataset layout is documented in `make_dev_dataset.py`; do not use the `segment` column in rules.
 
+### Test a teammate's branch with one command
+
+```
+solution/tools/test_branch.sh <branch> [--sealed] [--force]    # verdict ACEPTAR / NEUTRO / RECHAZAR + dev_runs/<branch>_<commit>/informe.md
+solution/tools/test_branch.sh --merge <branch>                  # merge into the integration branch only if the last verdict for that commit was ACEPTAR
+```
+
+It fetches, builds a throw-away worktree of the branch (`~/hackdata/wt/`), trial-merges the integration branch (`model/v3-harness`,
+override with `INTEGRATION_BRANCH`), runs `dev.py` on the merged code (harness and scorer always come from this checkout) with
+`PYTHONHASHSEED=0` and a cache directory keyed by the hash of the cache-producing code (`~/hackdata/wt_data/<hash>-<window>`), and compares
+with the baseline of the integration tip (generated once per tree hash, `dev_runs/_baseline_*`). Every test appends a row to
+`dev_runs/registro.csv` (summary in `notes/registro_pruebas.md`). `--sealed` runs the sealed window once per tested tree
+(`dev_runs/sealed_log.txt`). `--merge` also notes the branch in `SUBMISSIONS.md` as a LIVE candidate; it never uploads or pushes.
+Only one test runs at a time (lock `~/hackdata/wt/.test.lock`); a second one waits. A merge conflict stops the test and lists the files.
+
 **Reproducibility: pin `PYTHONHASHSEED`.** The matcher iterates over sets, so its output depends on Python's hash order (on the
 dev window 84.26 vs 83.16 between two seeds). `dev.py` runs it with `PYTHONHASHSEED=0`; do the same for LIVE and **FINAL**
 (`PYTHONHASHSEED=0 python solution/bankrec.py --phase final ...`) so that the file you validate is the file you upload, and

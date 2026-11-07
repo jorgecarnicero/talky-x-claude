@@ -323,6 +323,15 @@ def compare_md(A, B):
          f"movimientos mal {A['wrong']} → {B['wrong']} ({B['wrong'] - A['wrong']:+d}).",
          "- Δ = puntos de margen de B − puntos de margen de A: **negativo = el margen se redujo** (mejora). Margen = lo que sube el "
          "score al sustituir ese segmento/clase por el golden (scorer oficial, ver `headroom.py`).", ""]
+    L += ["## Estabilidad del top 5", ""]
+    ta, tb = [s["segment"] for s in A["segments"][:5]], [s["segment"] for s in B["segments"][:5]]
+    L.append(f"- Segmentos, top 5 por puntos. A: {', '.join(ta)}. B: {', '.join(tb)}. En común: **{len(set(ta) & set(tb))} de 5**"
+             f" ({', '.join(x for x in ta if x in tb) or 'ninguno'}); posición idéntica: {sum(1 for x, y in zip(ta, tb) if x == y)} de 5.")
+    if "classes" in A and "classes" in B:
+        ka, kb = [c["class"] for c in A["classes"][:5]], [c["class"] for c in B["classes"][:5]]
+        L.append(f"- Clases, top 5 por puntos (filas). A: {', '.join(ka)}. B: {', '.join(kb)}. En común: **{len(set(ka) & set(kb))} de 5**"
+                 f" ({', '.join(x for x in ka if x in kb) or 'ninguna'}); posición idéntica: {sum(1 for x, y in zip(ka, kb) if x == y)} de 5.")
+    L += [""]
     sa = {s["segment"]: s for s in A["segments"]}
     sb = {s["segment"]: s for s in B["segments"]}
     rows = []

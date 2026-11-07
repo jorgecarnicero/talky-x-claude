@@ -3,6 +3,9 @@
 Orden estricto. **Una sola cosa pesada a la vez** (Mac de 16 GB; una ejecución completa llega a **8,3 GB** de pico).
 Tiempos medidos en LIVE el 2026-11-07 con 2a8fd84 y caché vacía: ov0 (EXC_OVERPAY=0) 13 min 14 s, pico 8,3 GB;
 ov1 (EXC_OVERPAY=1) 13 min 40 s, pico 7,1 GB. FINAL lee train+live+final, así que cuenta con algo más.
+**Ensayo en frío** (2857fe6, A, clon limpio, todas las cachés vacías, incluida `<datos>/solution/cache` de bankrec.py):
+**24 min 14 s**, pico 7,0 GB, salida idéntica a ov1. CPU casi igual (970 s frente a 944 s): los ~10 min de más son espera
+(disco al 97 %, caché fría de bankrec +63 s). **Planificar ~25 min por ejecución en FINAL, ~50 min A+B en secuencia.**
 
 | Paso | Qué | Tiempo | Memoria |
 |---|---|---|---|

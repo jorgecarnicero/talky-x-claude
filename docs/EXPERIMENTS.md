@@ -11,3 +11,4 @@ Every experiment is logged, accepted or not. HOLD looks used: 0 / 40.
 Calibration: v6b (same output as v6c) scored LIVE 93.31 and 94.20 on the HOLD months with the leaky setup.
 Clean HOLD 93.91 => leak worth ~0.3 there; honest HOLD -> LIVE gap ~0.6 (LIVE 95 <=> HOLD ~95.6; goal keeps 96.2).
 Run time: ~570 s per window (both windows in parallel).
+| D1 | (probe, no code) | Statement payments: missed lines with >= 10 golden items (TUNE, 1.66 alloc pts) clear a contiguous due-date window of the customer's open items | 274 of 281 lines have gaps (e.g. 685 paid, 763 open items skipped inside the span) | – | – | REJECTED before coding: set not recoverable from the amount without the advice | TUNE only |

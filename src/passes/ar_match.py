@@ -17,6 +17,8 @@ SEPA_EUR = {"ES", "PT", "FR", "IT", "DE", "NL", "BE", "AT", "IE", "LU", "FI", "G
 WH_COUNTRIES = {"MX", "BR", "MA"}
 WH_RATES = (0.0125, 0.015, 0.10)
 MAX_NODES = 6000
+DROP_DUST = os.environ.get("AR_DUST", "0") == "1"
+DUST_PCT = 0.031
 ZERO_UNITS = True
 SUBSET_ALL = False
 DP_MAX_POOL = 80
@@ -343,6 +345,11 @@ class Matcher:
         if not allit:
             return None
         opn = [i for i in allit if self.open.get(i, 0) > 0.005 and self.ix.item[i][4] <= bdate]
+        if DROP_DUST:
+            # small leftovers (<= 3 % of the invoice, e.g. a late early-payment discount, POLICIES §3) stay open but are
+            # almost never paid later (TRAIN: 184 of 13,394): keep them out of combinatorial searches unless referenced
+            opn = [i for i in opn if refs.get(i) or self.ix.item[i][0] != "ARI"
+                   or self.open[i] > DUST_PCT * self.ix.item[i][7] + 0.005]
         opn = self.make_units(opn, t.entity)
         self._zlo = (_d(bdate) - timedelta(days=90)).isoformat()
         # group open items by currency

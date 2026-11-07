@@ -28,3 +28,4 @@
 
 v3.5 LIVE 91.92 vs local 92.49 (gap 0.57, same as v3's 0.58) -> generalises, no sign of overfitting.
 Reproduce: `./run_v35.sh live` (runs team v3, docs extraction, our pipeline, validator).
+| 12:27 | sub_live_v35_final (rebuilt from pushed model/v3.5) | – | 92.82 | **91.92** (reproduced) |

@@ -28,6 +28,9 @@ STRICT_GAP = 0.3
 NM_FRACTIONS = (0.4, 0.5, 0.6)   # n-to-m: one invoice of a multi-invoice transfer paid at a clean fraction
 NM_ON = os.environ.get("AR_NM", "1") == "1"
 ZERO_REF = os.environ.get("AR_ZREF", "1") == "1"  # invoice+CN pairs netting to zero: only when the text cites one
+DISC_SUB = os.environ.get("AR_DISCSUB", "1") == "1"  # subsets where each discount-term invoice is full OR discounted
+DISC_MAX_POOL = 18
+DISC_MAX_HALF = 60000
 CN_REL = os.environ.get("AR_CNREL", "1") == "1"   # free credit notes only when referenced or rappel 'offset' (§5.9)
 NM_MAX_POOL = 40
 NM_COST = 3e10
@@ -509,6 +512,11 @@ class Matcher:
         r = self.variants_search(O, R, A, tol, fx, bdate, ctry, t, refs)
         if r:
             return r, "var"
+        # --- 4a. multi-invoice payment, each discount-term invoice at full open OR total - pct x total (unique only)
+        if DISC_SUB and tol <= 0.0051 and len(O) >= 2:
+            r = self.disc_subset(O, refs, A, fx, bdate)
+            if r:
+                return r, "disc_sub"
         # --- 4b. untouched invoice paid by a round fraction (partial / retention / advance net)
         if evid >= 1.5:
             r = self.fraction_partial(O, R, A, tol, fx, bdate)
@@ -557,6 +565,77 @@ class Matcher:
                     if abs(round(tot / n, 2) - A) <= tl:
                         return self.rows_for([i], A, fx, {i: "PARTIAL"}, {i: A}), "inst_ref"
         return None
+
+    def disc_subset(self, O, refs, A, fx, bdate):
+        it = self.ix.item
+        lo = (_d(bdate) - timedelta(days=400)).isoformat()
+        hi = (_d(bdate) + timedelta(days=20)).isoformat()
+        pool = [i for i in O if it[i][0] == "ARI" and self.sv(i) > 0.005
+                and ((it[i][4] >= lo and it[i][5] <= hi) or refs.get(i))]
+        if not (2 <= len(pool) <= DISC_MAX_POOL):
+            return None
+        opts = []
+        anyd = False
+        for i in pool:
+            o = [(cents(self.sv(i)), None)]
+            vs = self.item_cash_variants(i, self.open[i], bdate)
+            if vs:
+                c, e, a = vs[0]
+                o.append((cents(c - (self.open[i] - self.sv(i))), (e, a)))
+                anyd = True
+            opts.append((i, o))
+        if not anyd:
+            return None
+        T = cents(A)
+        h = len(opts) // 2
+        L, Rr = opts[:h], opts[h:]
+
+        def enum(part):
+            n = 1
+            for _, o in part:
+                n *= len(o) + 1
+            if n > DISC_MAX_HALF:
+                return None
+            out = {0: [()]}
+            for k, (i, o) in enumerate(part):
+                new = {}
+                for sm, lst in out.items():
+                    new.setdefault(sm, []).extend(lst)
+                    for v, var in o:
+                        ns = sm + v
+                        if ns > T:
+                            continue
+                        new.setdefault(ns, []).extend([x + ((i, var),) for x in lst])
+                for sm in new:
+                    if len(new[sm]) > 2:
+                        new[sm] = new[sm][:2]
+                out = new
+            return out
+        a = enum(L)
+        b = enum(Rr) if a is not None else None
+        if b is None:
+            self.stats["disc_cost"] += 1
+            return None
+        sols = []
+        for sm, la in a.items():
+            lb = b.get(T - sm)
+            if not lb:
+                continue
+            for x in la:
+                for y in lb:
+                    sols.append(x + y)
+                    if len(sols) > 1:
+                        self.stats["disc_ambig"] += 1
+                        return None
+        if len(sols) != 1:
+            return None
+        sel = sols[0]
+        if len(sel) < 2 or not any(var for _, var in sel):
+            return None
+        exc = {i: var[0] for i, var in sel if var}
+        amt = {i: var[1] for i, var in sel if var}
+        ids = sorted((i for i, _ in sel), key=lambda i: (it[i][4], it[i][3]))
+        return self.rows_for(ids, A, fx, exc, amt)
 
     def nm_fraction(self, O, R, refs, A, fx, bdate):
         it = self.ix.item

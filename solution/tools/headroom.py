@@ -267,6 +267,38 @@ def compute(run_name, data=None, top=10, level="full", log=print):
     return out
 
 
+LIVE_GAP = 0.03  # flag a segment when LIVE accuracy is more than 3 points below dev
+LIVE_DEFAULTS = ("notes/live_segments.csv", "live_segments.csv")
+
+
+def find_live(path=None):
+    for c in ([path] if path else [os.path.join(hr_lib.ROOT, p) for p in LIVE_DEFAULTS]):
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+def apply_live(R, path):
+    """add `live` (accuracy 0-1) and `live_flag` to every segment present in live_segments.csv (`segment,accuracy`, 0-1 or %)"""
+    live = {}
+    if path:
+        for r in csv.DictReader(open(path, encoding="utf-8-sig")):
+            v = float(str(r["accuracy"]).strip("% ").replace(",", "."))
+            live[r["segment"].strip()] = v / 100 if v > 1 else v
+    R["live_file"] = path
+    for s_ in R["segments"]:
+        if s_["segment"] in live:
+            s_["live"] = live[s_["segment"]]
+            s_["live_flag"] = s_["accuracy"] - live[s_["segment"]] > LIVE_GAP
+    return R
+
+
+def live_cell(s):
+    if "live" not in s:
+        return "–"
+    return f"{s['live']:.3f}" + (" ⚠" if s.get("live_flag") else "")
+
+
 def cached(run_name, level="segments", data=None, log=print):
     """compute() with a cache in dev_runs/<run>/headroom_cache.json (valid while result.json's score and sub.csv.gz are unchanged)."""
     d = hr_lib.run_dir_of(run_name)
@@ -381,9 +413,16 @@ def render_md(R, top):
          f"- Comprobaciones: el envío sin modificar reproduce el score de `result.json`; sustituir todos los segmentos da {R['oracle']:.2f}.", ""]
     L += ["## 1. Margen por segmento", "",
           "Puntos que sube el score si los movimientos del segmento pasan a ser exactamente el golden (segmentos sin fallos: 0,00, omitidos).", ""]
-    L += md_table(["segmento", "movimientos", "accuracy actual", "mal", "puntos", "% del gap"],
-                  [[s["segment"], s["n"], f"{s['accuracy']:.3f}", s["wrong"], f"{s['points']:.2f}", pct(s["points"], gap)]
+    L += md_table(["segmento", "movimientos", "accuracy actual", "acc LIVE", "mal", "puntos", "% del gap"],
+                  [[s["segment"], s["n"], f"{s['accuracy']:.3f}", live_cell(s), s["wrong"], f"{s['points']:.2f}", pct(s["points"], gap)]
                    for s in wrong_segs])
+    nflag = [s["segment"] for s in R["segments"] if s.get("live_flag")]
+    if R.get("live_file"):
+        L += ["", f"«acc LIVE» de `{R['live_file'] if not R['live_file'].startswith(hr_lib.ROOT) else os.path.relpath(R['live_file'], hr_lib.ROOT)}` (– = el segmento no está en ese fichero); "
+              f"⚠ = LIVE más de {100 * LIVE_GAP:.0f} puntos peor que dev, es decir, dev engaña en ese segmento"
+              + (": " + ", ".join(nflag) if nflag else " (ninguno)") + "."]
+    else:
+        L += ["", "«acc LIVE»: no hay `live_segments.csv` (pasa `--live RUTA`, formato `segment,accuracy`); columna vacía."]
     tot = R["sum_segment_points"]
     L += ["", f"**Coherencia**: suma de márgenes por segmento = **{tot:.2f}** frente a **{gap:.2f}** que faltan (100 − {score0:.2f}); "
           f"diferencia {gap - tot:+.2f}. No coinciden exactamente porque el score no es lineal (F1 de asignación y macro-F1 de "
@@ -444,12 +483,12 @@ def render_md(R, top):
           "son recall; **alta** si ≥ 60 % son ambigüedad o imposibles; **media** el resto. *Puntos recuperables* = puntos × fracción (a) "
           "recall. Prioridad = puntos recuperables × (1 / 0,5 / 0,25 para baja / media / alta).", ""]
     nx = sorted(tops, key=lambda s: -s["detail"]["priority"])
-    L += md_table(["#", "segmento", "puntos", "recuperables", "tipo dominante", "recall / ambig. / imposible", "dificultad", "prioridad", "qué probar"],
-                  [[i + 1, s["segment"], f"{s['points']:.2f}", f"{s['detail']['recoverable_points']:.2f}",
+    L += md_table(["#", "segmento", "puntos", "recuperables", "acc LIVE", "tipo dominante", "recall / ambig. / imposible", "dificultad", "prioridad", "qué probar"],
+                  [[i + 1, s["segment"], f"{s['points']:.2f}", f"{s['detail']['recoverable_points']:.2f}", live_cell(s),
                     ERR_NAME[max(s["tax"].items(), key=lambda x: x[1])[0]],
                     f"{s['detail']['kinds'].get('recall', 0)} / {s['detail']['kinds'].get('ambiguity', 0)} / {s['detail']['kinds'].get('impossible', 0)}",
                     s["detail"]["difficulty"], f"{s['detail']['priority']:.2f}", sentence(s)] for i, s in enumerate(nx)],
-                  align=["r", "l", "r", "r", "l", "r", "l", "r", "l"])
+                  align=["r", "l", "r", "r", "r", "l", "r", "l", "r", "l"])
     L += [""]
     return L
 
@@ -465,10 +504,10 @@ def render_block(R, name):
          f"- Segmentos del bloque: {len(b['segments'])}; clases: {', '.join(b['classes']) or 'ninguna'}. Mapa en `solution/tools/blocks.yaml` "
          "(solo para informar; el pipeline no lo lee).", ""]
     L += ["## Segmentos", ""]
-    L += md_table(["segmento", "movimientos", "accuracy", "mal", "puntos", "recuperables", "(a) pares", "(b) exc.", "(c) imp.", "(d) cat.", "(e) filas"],
-                  [[s["segment"], s["n"], f"{s['accuracy']:.3f}", s["wrong"], f"{s['points']:.2f}",
+    L += md_table(["segmento", "movimientos", "accuracy", "acc LIVE", "mal", "puntos", "recuperables", "(a) pares", "(b) exc.", "(c) imp.", "(d) cat.", "(e) filas"],
+                  [[s["segment"], s["n"], f"{s['accuracy']:.3f}", live_cell(s), s["wrong"], f"{s['points']:.2f}",
                     f"{s['detail']['recoverable_points']:.2f}" if "detail" in s else "–"] + [s["tax"][k] for k in "abcde"] for s in segs]
-                  or [["(sin fallos)"] + [""] * 10])
+                  or [["(sin fallos)"] + [""] * 11])
     L += ["", "## Clases de excepción", ""]
     if cls:
         L += md_table(["clase", "F1", "soporte", "puntos (filas)", "puntos (líneas)", "puntos a F1 0,9"],
@@ -485,6 +524,7 @@ def main():
     ap.add_argument("run", nargs="+", help="a run; with --compare: two runs A B")
     ap.add_argument("--compare", action="store_true", help="show how the margin per segment and class moved from run A to run B")
     ap.add_argument("--data", default=None, help="dev dataset dir (default: the one recorded in result.json)")
+    ap.add_argument("--live", default=None, help="live_segments.csv (`segment,accuracy`); default notes/live_segments.csv or ./live_segments.csv")
     ap.add_argument("--top", type=int, default=10, help="segments in the detailed sections (default 10)")
     ap.add_argument("--out", default=None, help="output file (default notes/headroom_<run>.md, or notes/headroom_compare_A_vs_B.md)")
     a = ap.parse_args()
@@ -502,7 +542,7 @@ def main():
     if len(a.run) != 1:
         sys.exit("give one run (or --compare A B)")
     a.run = a.run[0]
-    R = compute(a.run, a.data, a.top)
+    R = apply_live(compute(a.run, a.data, a.top), find_live(a.live))
     out = a.out or os.path.join(hr_lib.ROOT, "notes", f"headroom_{R['run']}.md")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     open(out, "w", encoding="utf-8").write("\n".join(render_md(R, a.top)) + "\n")

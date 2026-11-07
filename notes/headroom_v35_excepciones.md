@@ -5,21 +5,21 @@
 
 ## Segmentos
 
-| segmento | movimientos | accuracy | mal | puntos | recuperables | (a) pares | (b) exc. | (c) imp. | (d) cat. | (e) filas |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| ar_overpayment | 135 | 0.370 | 85 | 0.97 | 0.55 | 85 | 0 | 0 | 0 | 0 |
-| ar_short_dispute | 348 | 0.796 | 71 | 0.80 | 0.63 | 71 | 0 | 0 | 0 | 0 |
-| ar_fx | 263 | 0.734 | 70 | 0.28 | 0.12 | 69 | 0 | 0 | 0 | 1 |
-| ar_discount_late | 269 | 0.680 | 86 | 0.18 | 0.10 | 84 | 2 | 0 | 0 | 0 |
-| ar_short_withholding | 491 | 0.919 | 40 | 0.17 | 0.09 | 32 | 2 | 0 | 0 | 6 |
-| ar_duplicate_payment | 228 | 0.855 | 33 | 0.17 | 0.00 | 32 | 1 | 0 | 0 | 0 |
-| ar_short_discount | 2355 | 0.949 | 119 | 0.15 | – | 104 | 12 | 0 | 0 | 3 |
-| ap_fx | 411 | 0.993 | 3 | 0.13 | – | 2 | 0 | 0 | 0 | 1 |
-| ar_dd_returned | 1214 | 0.978 | 27 | 0.06 | – | 27 | 0 | 0 | 0 | 0 |
-| ar_short_bank_charges | 51 | 0.961 | 2 | 0.04 | – | 2 | 0 | 0 | 0 | 0 |
-| ar_partial | 1333 | 0.973 | 36 | 0.03 | – | 16 | 18 | 0 | 0 | 2 |
-| ar_dispute_settlement | 373 | 0.965 | 13 | 0.01 | – | 2 | 11 | 0 | 0 | 0 |
-| ap_duplicate_refund | 26 | 0.923 | 2 | 0.01 | – | 0 | 0 | 0 | 2 | 0 |
+| segmento | movimientos | accuracy | acc LIVE | mal | puntos | recuperables | (a) pares | (b) exc. | (c) imp. | (d) cat. | (e) filas |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| ar_overpayment | 135 | 0.370 | – | 85 | 0.97 | 0.55 | 85 | 0 | 0 | 0 | 0 |
+| ar_short_dispute | 348 | 0.796 | – | 71 | 0.80 | 0.63 | 71 | 0 | 0 | 0 | 0 |
+| ar_fx | 263 | 0.734 | – | 70 | 0.28 | 0.12 | 69 | 0 | 0 | 0 | 1 |
+| ar_discount_late | 269 | 0.680 | – | 86 | 0.18 | 0.10 | 84 | 2 | 0 | 0 | 0 |
+| ar_short_withholding | 491 | 0.919 | – | 40 | 0.17 | 0.09 | 32 | 2 | 0 | 0 | 6 |
+| ar_duplicate_payment | 228 | 0.855 | – | 33 | 0.17 | 0.00 | 32 | 1 | 0 | 0 | 0 |
+| ar_short_discount | 2355 | 0.949 | – | 119 | 0.15 | – | 104 | 12 | 0 | 0 | 3 |
+| ap_fx | 411 | 0.993 | – | 3 | 0.13 | – | 2 | 0 | 0 | 0 | 1 |
+| ar_dd_returned | 1214 | 0.978 | – | 27 | 0.06 | – | 27 | 0 | 0 | 0 | 0 |
+| ar_short_bank_charges | 51 | 0.961 | – | 2 | 0.04 | – | 2 | 0 | 0 | 0 | 0 |
+| ar_partial | 1333 | 0.973 | – | 36 | 0.03 | – | 16 | 18 | 0 | 0 | 2 |
+| ar_dispute_settlement | 373 | 0.965 | – | 13 | 0.01 | – | 2 | 11 | 0 | 0 | 0 |
+| ap_duplicate_refund | 26 | 0.923 | – | 2 | 0.01 | – | 0 | 0 | 0 | 2 | 0 |
 
 ## Clases de excepción
 

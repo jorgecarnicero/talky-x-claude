@@ -9,47 +9,49 @@
 
 Puntos que sube el score si los movimientos del segmento pasan a ser exactamente el golden (segmentos sin fallos: 0,00, omitidos).
 
-| segmento | movimientos | accuracy actual | mal | puntos | % del gap |
-|---|---:|---:|---:|---:|---:|
-| ar_ref_noise | 14940 | 0.954 | 691 | 1.50 | 21 % |
-| ar_overpayment | 135 | 0.370 | 85 | 0.97 | 14 % |
-| ar_1toN_credit_note | 1079 | 0.666 | 360 | 0.88 | 12 % |
-| ar_short_dispute | 348 | 0.796 | 71 | 0.80 | 11 % |
-| ar_n_to_m | 600 | 0.387 | 368 | 0.54 | 8 % |
-| ar_1toN_text | 2048 | 0.934 | 135 | 0.34 | 5 % |
-| ar_fx | 263 | 0.734 | 70 | 0.28 | 4 % |
-| ar_discount_late | 269 | 0.680 | 86 | 0.18 | 3 % |
-| ar_short_withholding | 491 | 0.919 | 40 | 0.17 | 2 % |
-| ar_duplicate_payment | 228 | 0.855 | 33 | 0.17 | 2 % |
-| ar_instalment | 1497 | 0.886 | 171 | 0.15 | 2 % |
-| ar_short_discount | 2355 | 0.949 | 119 | 0.15 | 2 % |
-| ap_fx | 411 | 0.993 | 3 | 0.13 | 2 % |
-| ar_same_amount_month | 1422 | 0.968 | 45 | 0.12 | 2 % |
-| ap_confirming | 261 | 0.843 | 41 | 0.11 | 2 % |
-| ar_1toN_remittance | 381 | 0.971 | 11 | 0.08 | 1 % |
-| ar_same_amount_fifo | 2024 | 0.959 | 82 | 0.06 | 1 % |
-| ar_dd_returned | 1214 | 0.978 | 27 | 0.06 | 1 % |
-| ar_replaced_invoice | 82 | 0.695 | 25 | 0.05 | 1 % |
-| ar_dd_represented_transfer | 311 | 0.942 | 18 | 0.04 | 1 % |
-| ar_retention | 304 | 0.967 | 10 | 0.04 | 1 % |
-| unidentified | 1160 | 0.992 | 9 | 0.04 | 1 % |
-| ar_short_bank_charges | 51 | 0.961 | 2 | 0.04 | 1 % |
-| ar_partial | 1333 | 0.973 | 36 | 0.03 | 0 % |
-| unidentified_lookalike | 478 | 0.979 | 10 | 0.03 | 0 % |
-| ar_advance_deduction | 113 | 0.912 | 10 | 0.03 | 0 % |
-| ar_third_party_confirming | 293 | 0.942 | 17 | 0.02 | 0 % |
-| ar_dd_batch | 540 | 0.991 | 5 | 0.02 | 0 % |
-| ar_dispute_settlement | 373 | 0.965 | 13 | 0.01 | 0 % |
-| ar_1to1 | 6725 | 0.999 | 10 | 0.01 | 0 % |
-| ar_third_party_agency | 123 | 0.919 | 10 | 0.01 | 0 % |
-| ar_third_party_parent | 51 | 0.941 | 3 | 0.01 | 0 % |
-| ap_duplicate_refund | 26 | 0.923 | 2 | 0.01 | 0 % |
-| ap_factored | 477 | 0.996 | 2 | 0.01 | 0 % |
-| ar_new_iban | 102 | 0.990 | 1 | 0.01 | 0 % |
-| customer_refund | 126 | 0.984 | 2 | 0.00 | 0 % |
-| ar_retention_release | 257 | 0.996 | 1 | 0.00 | 0 % |
-| ar_cheque_deposit | 675 | 0.999 | 1 | 0.00 | 0 % |
-| ap_payment_multi | 8323 | 1.000 | 1 | 0.00 | 0 % |
+| segmento | movimientos | accuracy actual | acc LIVE | mal | puntos | % del gap |
+|---|---:|---:|---:|---:|---:|---:|
+| ar_ref_noise | 14940 | 0.954 | – | 691 | 1.50 | 21 % |
+| ar_overpayment | 135 | 0.370 | – | 85 | 0.97 | 14 % |
+| ar_1toN_credit_note | 1079 | 0.666 | – | 360 | 0.88 | 12 % |
+| ar_short_dispute | 348 | 0.796 | – | 71 | 0.80 | 11 % |
+| ar_n_to_m | 600 | 0.387 | – | 368 | 0.54 | 8 % |
+| ar_1toN_text | 2048 | 0.934 | – | 135 | 0.34 | 5 % |
+| ar_fx | 263 | 0.734 | – | 70 | 0.28 | 4 % |
+| ar_discount_late | 269 | 0.680 | – | 86 | 0.18 | 3 % |
+| ar_short_withholding | 491 | 0.919 | – | 40 | 0.17 | 2 % |
+| ar_duplicate_payment | 228 | 0.855 | – | 33 | 0.17 | 2 % |
+| ar_instalment | 1497 | 0.886 | – | 171 | 0.15 | 2 % |
+| ar_short_discount | 2355 | 0.949 | – | 119 | 0.15 | 2 % |
+| ap_fx | 411 | 0.993 | – | 3 | 0.13 | 2 % |
+| ar_same_amount_month | 1422 | 0.968 | – | 45 | 0.12 | 2 % |
+| ap_confirming | 261 | 0.843 | – | 41 | 0.11 | 2 % |
+| ar_1toN_remittance | 381 | 0.971 | – | 11 | 0.08 | 1 % |
+| ar_same_amount_fifo | 2024 | 0.959 | – | 82 | 0.06 | 1 % |
+| ar_dd_returned | 1214 | 0.978 | – | 27 | 0.06 | 1 % |
+| ar_replaced_invoice | 82 | 0.695 | – | 25 | 0.05 | 1 % |
+| ar_dd_represented_transfer | 311 | 0.942 | – | 18 | 0.04 | 1 % |
+| ar_retention | 304 | 0.967 | – | 10 | 0.04 | 1 % |
+| unidentified | 1160 | 0.992 | – | 9 | 0.04 | 1 % |
+| ar_short_bank_charges | 51 | 0.961 | – | 2 | 0.04 | 1 % |
+| ar_partial | 1333 | 0.973 | – | 36 | 0.03 | 0 % |
+| unidentified_lookalike | 478 | 0.979 | – | 10 | 0.03 | 0 % |
+| ar_advance_deduction | 113 | 0.912 | – | 10 | 0.03 | 0 % |
+| ar_third_party_confirming | 293 | 0.942 | – | 17 | 0.02 | 0 % |
+| ar_dd_batch | 540 | 0.991 | – | 5 | 0.02 | 0 % |
+| ar_dispute_settlement | 373 | 0.965 | – | 13 | 0.01 | 0 % |
+| ar_1to1 | 6725 | 0.999 | – | 10 | 0.01 | 0 % |
+| ar_third_party_agency | 123 | 0.919 | – | 10 | 0.01 | 0 % |
+| ar_third_party_parent | 51 | 0.941 | – | 3 | 0.01 | 0 % |
+| ap_duplicate_refund | 26 | 0.923 | – | 2 | 0.01 | 0 % |
+| ap_factored | 477 | 0.996 | – | 2 | 0.01 | 0 % |
+| ar_new_iban | 102 | 0.990 | – | 1 | 0.01 | 0 % |
+| customer_refund | 126 | 0.984 | – | 2 | 0.00 | 0 % |
+| ar_retention_release | 257 | 0.996 | – | 1 | 0.00 | 0 % |
+| ar_cheque_deposit | 675 | 0.999 | – | 1 | 0.00 | 0 % |
+| ap_payment_multi | 8323 | 1.000 | – | 1 | 0.00 | 0 % |
+
+«acc LIVE»: no hay `live_segments.csv` (pasa `--live RUTA`, formato `segment,accuracy`); columna vacía.
 
 **Coherencia**: suma de márgenes por segmento = **7.10** frente a **7.13** que faltan (100 − 92.87); diferencia +0.03. No coinciden exactamente porque el score no es lineal (F1 de asignación y macro-F1 de excepciones son cocientes): cada segmento se mide aislado, con el resto tal como está, mientras que corregirlos todos a la vez da exactamente 100. Los 2626 movimientos mal (3.78 % de 69553) valen por sí solos 1.13 puntos del término de accuracy (peso 0,3).
 
@@ -205,16 +207,16 @@ Los ejemplos son bank_txn_id mal, uno de cada tipo de error por turnos, para `so
 
 Dificultad estimada (heurística, no medida): **baja** si ≥ 50 % de los fallos son de excepción/importe/categoría (b/c/d) o ≥ 60 % son recall; **alta** si ≥ 60 % son ambigüedad o imposibles; **media** el resto. *Puntos recuperables* = puntos × fracción (a) recall. Prioridad = puntos recuperables × (1 / 0,5 / 0,25 para baja / media / alta).
 
-| # | segmento | puntos | recuperables | tipo dominante | recall / ambig. / imposible | dificultad | prioridad | qué probar |
-|---:|---|---:|---:|---|---:|---|---:|---|
-| 1 | ar_short_dispute | 0.80 | 0.63 | pares equivocados | 56 / 15 / 0 | baja | 0.63 | 100 % son «pares equivocados» (pase principal `v3rest:cat`, 62 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
-| 2 | ar_1toN_credit_note | 0.88 | 0.60 | pares equivocados | 244 / 116 / 0 | baja | 0.60 | 58 % son «pares equivocados» (pase principal `v3rest:cat`, 130 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
-| 3 | ar_1toN_text | 0.34 | 0.32 | pares equivocados | 126 / 9 / 0 | baja | 0.32 | 88 % son «pares equivocados» (pase principal `v3rest:cat`, 61 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
-| 4 | ar_overpayment | 0.97 | 0.55 | pares equivocados | 48 / 37 / 0 | media | 0.27 | 100 % son «pares equivocados» (pase principal `v3rest:cat`, 84 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
-| 5 | ar_n_to_m | 0.54 | 0.26 | pares equivocados | 180 / 188 / 0 | media | 0.13 | 97 % son «pares equivocados» (pase principal `v3rest:cat`, 311 fallos); domina la ambigüedad (sin referencia y muchos candidatos, o pagador no identificado): hace falta un criterio de selección entre candidatos o mejor identificación de pagador, no más cobertura. |
-| 6 | ar_ref_noise | 1.50 | 0.29 | pares equivocados | 134 / 557 / 0 | alta | 0.07 | 92 % son «pares equivocados» (pase principal `v3rest:cat`, 373 fallos); domina la ambigüedad (sin referencia y muchos candidatos, o pagador no identificado): hace falta un criterio de selección entre candidatos o mejor identificación de pagador, no más cobertura. |
-| 7 | ar_fx | 0.28 | 0.12 | pares equivocados | 29 / 41 / 0 | media | 0.06 | 99 % son «pares equivocados» (pase principal `v3:party_exact`, 25 fallos); domina la ambigüedad (sin referencia y muchos candidatos, o pagador no identificado): hace falta un criterio de selección entre candidatos o mejor identificación de pagador, no más cobertura. |
-| 8 | ar_discount_late | 0.18 | 0.10 | pares equivocados | 48 / 38 / 0 | media | 0.05 | 98 % son «pares equivocados» (pase principal `v3rest:cat`, 54 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
-| 9 | ar_short_withholding | 0.17 | 0.09 | pares equivocados | 21 / 19 / 0 | media | 0.04 | 80 % son «pares equivocados» (pase principal `v3rest:cat`, 26 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
-| 10 | ar_duplicate_payment | 0.17 | 0.00 | pares equivocados | 0 / 0 / 33 | alta | 0.00 | 97 % son «pares equivocados» (pase principal `v3rest:cat`, 32 fallos); casi todo son partidas que no estaban abiertas en ese momento (duplicados, devoluciones, consumidas antes): hace falta modelar el estado del ledger, no más cobertura. |
+| # | segmento | puntos | recuperables | acc LIVE | tipo dominante | recall / ambig. / imposible | dificultad | prioridad | qué probar |
+|---:|---|---:|---:|---:|---|---:|---|---:|---|
+| 1 | ar_short_dispute | 0.80 | 0.63 | – | pares equivocados | 56 / 15 / 0 | baja | 0.63 | 100 % son «pares equivocados» (pase principal `v3rest:cat`, 62 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
+| 2 | ar_1toN_credit_note | 0.88 | 0.60 | – | pares equivocados | 244 / 116 / 0 | baja | 0.60 | 58 % son «pares equivocados» (pase principal `v3rest:cat`, 130 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
+| 3 | ar_1toN_text | 0.34 | 0.32 | – | pares equivocados | 126 / 9 / 0 | baja | 0.32 | 88 % son «pares equivocados» (pase principal `v3rest:cat`, 61 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
+| 4 | ar_overpayment | 0.97 | 0.55 | – | pares equivocados | 48 / 37 / 0 | media | 0.27 | 100 % son «pares equivocados» (pase principal `v3rest:cat`, 84 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
+| 5 | ar_n_to_m | 0.54 | 0.26 | – | pares equivocados | 180 / 188 / 0 | media | 0.13 | 97 % son «pares equivocados» (pase principal `v3rest:cat`, 311 fallos); domina la ambigüedad (sin referencia y muchos candidatos, o pagador no identificado): hace falta un criterio de selección entre candidatos o mejor identificación de pagador, no más cobertura. |
+| 6 | ar_ref_noise | 1.50 | 0.29 | – | pares equivocados | 134 / 557 / 0 | alta | 0.07 | 92 % son «pares equivocados» (pase principal `v3rest:cat`, 373 fallos); domina la ambigüedad (sin referencia y muchos candidatos, o pagador no identificado): hace falta un criterio de selección entre candidatos o mejor identificación de pagador, no más cobertura. |
+| 7 | ar_fx | 0.28 | 0.12 | – | pares equivocados | 29 / 41 / 0 | media | 0.06 | 99 % son «pares equivocados» (pase principal `v3:party_exact`, 25 fallos); domina la ambigüedad (sin referencia y muchos candidatos, o pagador no identificado): hace falta un criterio de selección entre candidatos o mejor identificación de pagador, no más cobertura. |
+| 8 | ar_discount_late | 0.18 | 0.10 | – | pares equivocados | 48 / 38 / 0 | media | 0.05 | 98 % son «pares equivocados» (pase principal `v3rest:cat`, 54 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
+| 9 | ar_short_withholding | 0.17 | 0.09 | – | pares equivocados | 21 / 19 / 0 | media | 0.04 | 80 % son «pares equivocados» (pase principal `v3rest:cat`, 26 fallos); domina el recall (referencia visible o ≤ 5 candidatos del pagador): ampliar la cobertura del matcher. |
+| 10 | ar_duplicate_payment | 0.17 | 0.00 | – | pares equivocados | 0 / 0 / 33 | alta | 0.00 | 97 % son «pares equivocados» (pase principal `v3rest:cat`, 32 fallos); casi todo son partidas que no estaban abiertas en ese momento (duplicados, devoluciones, consumidas antes): hace falta modelar el estado del ledger, no más cobertura. |
 

@@ -13,6 +13,7 @@ Passes (each bank line is resolved by the first pass that claims it):
 Standard library only (+ `pdftotext` on PATH for PDF advices).
 """
 import argparse
+import bisect
 import csv
 import gzip
 import io
@@ -371,6 +372,7 @@ class Rec:
         self.customers = {r["customer_id"]: r for r in rcsv(os.path.join(m, "customers.csv"))}
         self.suppliers = {r["supplier_id"]: r for r in rcsv(os.path.join(m, "suppliers.csv"))}
         self.fx = defaultdict(dict)
+        self._fx_days = {}
         for r in rcsv(os.path.join(m, "fx_rates.csv")):
             self.fx[r["currency"]][r["date"]] = float(r["units_per_eur"])
         self.party_by_iban = defaultdict(set)
@@ -419,11 +421,14 @@ class Rec:
         tab = self.fx.get(cur)
         if not tab:
             return None
-        for i in range(10):
-            k = (day - timedelta(days=i)).isoformat()
-            if k in tab:
-                return tab[k]
-        return None
+        k = day.isoformat()
+        if k in tab:
+            return tab[k]
+        ds = self._fx_days.get(cur)
+        if ds is None:
+            ds = self._fx_days[cur] = sorted(tab)
+        i = bisect.bisect_right(ds, k) - 1          # last rate on or before the day; none before -> first after
+        return tab[ds[i if i >= 0 else 0]]
 
     def convert(self, amt, from_cur, to_cur, day):
         a, b = self.fx_rate(from_cur, day), self.fx_rate(to_cur, day)

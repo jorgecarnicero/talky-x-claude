@@ -1,0 +1,31 @@
+# Step 1 ablations on TUNE (tag, then the env that defines it). Baseline flags: AR_DUST=1 EXC_R5=1 PAYER_DIR=1.
+# --- later passes (checkpoint reused: fast)
+nopass_cancel_guard
+nopass_exc_fix
+nopass_ar_bigpool
+nopass_ar_multi_late
+nopass_ar_match
+# --- flags currently on
+flag_AR_DUST0 AR_DUST=0
+flag_EXC_R5_0 EXC_R5=0
+flag_PAYER_DIR0 PAYER_DIR=0
+flag_AR_NM0 AR_NM=0
+flag_BP_DISC0 BP_DISC=0
+flag_BP_WIN0 BP_WIN=0
+flag_BP_TWO_STAGE0 BP_TWO_STAGE=0
+flag_BP_CN_SINGLE0 BP_CN_SINGLE=0
+flag_BP_CN_FILTER0 BP_CN_FILTER=0
+flag_BP_CN_CANC0 BP_CN_CANC=0
+# --- data-fitted constants: one step each side (plateau check)
+const_BP_KMAX2 BP_KMAX=2
+const_BP_KMAX4 BP_KMAX=4
+const_BP_DUE_HI14 BP_DUE_HI=14
+const_BP_DUE_HI28 BP_DUE_HI=28
+const_BP_K3_POOL40 BP_K3_POOL=40
+const_BP_K3_POOL80 BP_K3_POOL=80
+# --- early passes (full re-run: slow)
+nopass_ar_pdf
+nopass_ar_multi
+nopass_nonitem
+nopass_ap_match
+nopass_remittance

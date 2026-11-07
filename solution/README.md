@@ -32,6 +32,45 @@ python solution/tools/diagnose.py sub_dev.csv.gz why_dev.csv ar_ref_noise,ar_ins
 
 Quick smoke test: `--phase sample` + `python starter/score_train.py sub_sample.csv.gz --sample` (~15 s).
 
+## LIVE simulation on TRAIN (preferred way to iterate; no submissions spent)
+
+`solution/tools/dev.py` builds a LIVE-shaped dataset out of TRAIN (outside the repo, in `~/hackdata/data_dev`) and runs the
+**unchanged** pipeline on it with `--phase live`, then scores it with the official scorer. Needs DuckDB only to build
+the dataset (`pip install duckdb`) and `pdftotext` on PATH (without it PDF advices are skipped and the score is not comparable).
+
+```
+python solution/tools/dev.py --name my-idea            # engine v35 if src/pipeline.py exists (--engine v3 for v3 alone); window 2025-04-01..2025-05-31, ~2 min; writes dev_runs/my-idea/
+python solution/tools/dev.py --name v3 --src /path/to/data     # --src: folder with train/ and masters/ (default ~/hackdata/data)
+python solution/tools/compare.py v3 my-idea            # ACCEPT iff score up and no >90 % segment drops > 0.5 pts
+python solution/tools/dev.py --start 2025-04-01 --end 2025-05-31 --out ~/hackdata/data_dev_mine --name my-idea   # own dataset dir: parallel runs do not clash
+python solution/tools/dev.py --sealed --name final-check   # sealed window 2025-01-01..2025-02-28: use sparingly
+python solution/tools/dev_acceptance.py                # harness self-tests (oracle = 100, all-UNIDENTIFIED, leak, opening table, determinism)
+```
+
+`dev_runs/<name>/`: `report.md`, `result.json`, `segments.csv`, `classes.csv` (per exception class: predicted rows, golden rows,
+precision / recall / F1, "(n pequeño)" if < 50 cases), `failures_<segment>.csv` (every wrong bank line: text, golden, prediction,
+which matcher produced it). Exception classes with < 100 golden rows are flagged as unreliable. The dataset layout is documented in `make_dev_dataset.py`; do not use the `segment` column in rules.
+
+### Test a teammate's branch with one command
+
+```
+solution/tools/test_branch.sh <branch> [--sealed] [--force]    # verdict ACEPTAR / NEUTRO / RECHAZAR + dev_runs/<branch>_<commit>/informe.md
+solution/tools/test_branch.sh --merge <branch>                  # merge into the integration branch only if the last verdict for that commit was ACEPTAR
+```
+
+It fetches, builds a throw-away worktree of the branch (`~/hackdata/wt/`), trial-merges the integration branch (`model/v3-harness`,
+override with `INTEGRATION_BRANCH`), runs `dev.py` on the merged code (harness and scorer always come from this checkout) with
+`PYTHONHASHSEED=0` and a cache directory keyed by the hash of the cache-producing code (`~/hackdata/wt_data/<hash>-<window>`), and compares
+with the baseline of the integration tip (generated once per tree hash, `dev_runs/_baseline_*`). Every test appends a row to
+`dev_runs/registro.csv` (summary in `notes/registro_pruebas.md`). `--sealed` runs the sealed window once per tested tree
+(`dev_runs/sealed_log.txt`). `--merge` also notes the branch in `SUBMISSIONS.md` as a LIVE candidate; it never uploads or pushes.
+Only one test runs at a time (lock `~/hackdata/wt/.test.lock`); a second one waits. A merge conflict stops the test and lists the files.
+
+**Reproducibility: pin `PYTHONHASHSEED`.** The matcher iterates over sets, so its output depends on Python's hash order (on the
+dev window 84.26 vs 83.16 between two seeds). `dev.py` runs it with `PYTHONHASHSEED=0`; do the same for LIVE and **FINAL**
+(`PYTHONHASHSEED=0 python solution/bankrec.py --phase final ...`) so that the file you validate is the file you upload, and
+re-runs are identical.
+
 ## Submit
 
 ```

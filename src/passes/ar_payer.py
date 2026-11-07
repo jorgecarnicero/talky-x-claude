@@ -50,6 +50,41 @@ def _try(m, cid, t, A, toks, grefs, words, month, evid):
         return None
 
 
+def round_excess(ex, o):
+    """the customer paid a round extra (POLICIES §3 OVERPAYMENT: one invoice, fully cleared): whole 1/2/5 x 10^k
+    currency units, or an exact 1/2/5/10 % of the open amount. On TRAIN golden 2021-2025 every OVERPAYMENT line is a
+    single invoice with such an excess; arbitrary excesses are almost always other cases (several invoices, discounts)."""
+    ex = round(ex, 2)
+    if ex >= 1 and abs(ex - round(ex)) < 0.005:
+        v = int(round(ex))
+        while v % 10 == 0:
+            v //= 10
+        if v in (1, 2, 5):
+            return True
+    return any(abs(ex - round(o * p, 2)) <= 0.011 for p in (0.01, 0.02, 0.05, 0.10))
+
+
+def overpayment(m, ctx, t, A, cands):
+    """strong, unrivalled payer + exactly one open invoice (line currency, issued by the booking date) with
+    open < cash <= open * 1.105 and a round excess -> that invoice, cleared at its open amount, OVERPAYMENT"""
+    cid, sc, _ = cands[0]
+    if sc < S_TOP or (len(cands) > 1 and sc - cands[1][1] < MARGIN_TOP):
+        return None
+    it = m.ix.item
+    hits = []
+    for iid in m.ix.cust_items.get(cid, ()):
+        v = it[iid]
+        o = ctx.open.get(iid, 0.0)
+        if v[0] != "ARI" or o <= 0.005 or v[6] != t.currency or v[4] > t.booking_date or v[1] != t.entity:
+            continue
+        if o < A - 0.005 and A <= o * 1.105 + 0.005 and round_excess(A - o, o):
+            hits.append((iid, o))
+    if len(hits) != 1:
+        return None
+    iid, o = hits[0]
+    return [{"item_id": iid, "amount": round(o, 2), "exception": "OVERPAYMENT"}]
+
+
 def run(ctx):
     import payer_v5 as P
     from passes import ar_match as AM
@@ -84,7 +119,12 @@ def run(ctx):
                 if len(expl) >= 3:
                     break
         if not expl:
-            stats["no_expl"] += 1
+            r = overpayment(m, ctx, t, A, cands)
+            if r:
+                ctx.allocate(t.bank_txn_id, r, "ar_payer:top:overpay_round")
+                stats["overpay"] += 1
+            else:
+                stats["no_expl"] += 1
             continue
         sc, rank, cid, (rows, kind) = expl[0]
         second = expl[1][0] if len(expl) > 1 else None

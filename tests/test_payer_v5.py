@@ -184,3 +184,45 @@ class DecisionRules(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Overpayment(unittest.TestCase):
+    def setUp(self):
+        from passes import ar_payer as AP
+        self.AP = AP
+        # item tuple layout of ar_index.ARIndex.item: (typ, ent, pid, doc, issue, due, cur, total, ...)
+        self.m = SimpleNamespace(ix=SimpleNamespace(
+            item={"I1": ("ARI", "ES01", "C1", "F1", "2025-04-01", "2025-05-01", "EUR", 1000.0),
+                  "I2": ("ARI", "ES01", "C1", "F2", "2025-04-02", "2025-05-02", "EUR", 1300.0),
+                  "I3": ("ARI", "ES01", "C1", "F3", "2025-06-20", "2025-07-20", "EUR", 950.0)},
+            cust_items={"C1": ["I1", "I2", "I3"]}))
+        self.ctx = SimpleNamespace(open={"I1": 1000.0, "I2": 1300.0, "I3": 950.0})
+
+    def run_(self, amount, cands=(("C1", 1.2, {}),)):
+        return self.AP.overpayment(self.m, self.ctx, txn(amount=amount, day="2025-05-10"), amount, list(cands))
+
+    def test_round_excess(self):
+        r = self.AP.round_excess
+        self.assertTrue(r(100.0, 4898.67))
+        self.assertTrue(r(10.0, 1000.0))
+        self.assertTrue(r(71.03, 710.28))     # 10 %
+        self.assertFalse(r(36.13, 15000.0))
+        self.assertFalse(r(3.0, 1000.0))
+
+    def test_single_invoice_round_excess(self):
+        self.assertEqual(self.run_(1100.0), [{"item_id": "I1", "amount": 1000.0, "exception": "OVERPAYMENT"}])
+
+    def test_arbitrary_excess_is_not_an_overpayment(self):
+        self.assertIsNone(self.run_(1037.42))
+
+    def test_invoice_issued_after_the_line_is_ignored(self):
+        self.ctx.open = {"I3": 950.0}
+        self.assertIsNone(self.run_(1000.0))
+
+    def test_ambiguous_payer_or_two_invoices(self):
+        self.assertIsNone(self.run_(1100.0, cands=(("C1", 1.2, {}), ("C2", 1.15, {}))))
+        self.ctx.open = {"I1": 1000.0, "I2": 1050.0}
+        self.assertIsNone(self.run_(1100.0))   # 1000 + 100 and 1050 + 50: both round -> no guess
+
+    def test_weak_payer(self):
+        self.assertIsNone(self.run_(1100.0, cands=(("C1", 0.7, {}),)))

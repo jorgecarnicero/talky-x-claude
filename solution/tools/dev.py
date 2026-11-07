@@ -110,7 +110,12 @@ def run_v35(d, run_dir, fresh):
         shutil.rmtree(cache, ignore_errors=True)
     env = {**os.environ, "PYTHONHASHSEED": "0", "BANKREC_DATA": d, "BANKREC_CACHE": cache}
     passes = V35_PASSES
-    if os.path.exists(os.path.join(CODE, "run_v6a.sh")):
+    conf = os.path.join(CODE, "solution", "cascade.conf")  # single source of truth, shared with solution/run_final.sh
+    if os.path.exists(conf):
+        kv = dict(l.strip().split("=", 1) for l in open(conf) if re.match(r"^[A-Z_0-9]+=", l))
+        passes = kv.pop("PASSES", passes)
+        env = {**env, **kv}
+    elif os.path.exists(os.path.join(CODE, "run_v6a.sh")):
         passes, env = V6A_PASSES, {**env, "EXC_R5": "1", "PAYER_DIR": "1"}
     py = sys.executable
     t0 = time.time()

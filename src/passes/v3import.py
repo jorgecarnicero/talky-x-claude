@@ -15,6 +15,15 @@ def _load(ctx):
     if "v3" in ctx.cache:
         return ctx.cache["v3"]
     path = os.environ.get("V3_SUB")
+    if path and os.environ.get("V3_WAIT") == "1":
+        # parallel chain (run_v6c.sh): the backbone runs concurrently; wait for its "<file>.done" marker
+        import time
+        t0 = time.time()
+        while not os.path.exists(path + ".done"):
+            if time.time() - t0 > float(os.environ.get("V3_WAIT_MAX", "3600")):
+                raise SystemExit(f"v3import: timed out waiting for {path}.done")
+            time.sleep(5)
+        print(f"    v3import: backbone ready after waiting {time.time() - t0:.0f}s", flush=True)
     if not path or not os.path.exists(path):
         raise SystemExit("v3import: set V3_SUB to the v3 submission for this phase")
     op = gzip.open if path.endswith(".gz") else open

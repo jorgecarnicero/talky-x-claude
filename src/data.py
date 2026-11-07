@@ -145,6 +145,10 @@ class Ctx:
         items = pd.concat([load_items(root, p) for p in chain], ignore_index=True)
         items = items.drop_duplicates("item_id", keep="last")
         bank = load_bank(root, phase)
+        # first booking date of the WHOLE phase file (2025-07-01 LIVE, 2026-01-01 FINAL), taken before --from/--to
+        # narrow the window: items issued from this day on are new in the phase, the older ones come from
+        # open_items_at_start
+        self.phase_start = bank.booking_date.min() if len(bank) else None
         if dfrom:
             bank = bank[bank.booking_date >= dfrom]
         if dto:
@@ -172,8 +176,8 @@ class Ctx:
             oi = _read(os.path.join(self.phase_dir, "open_items_at_start.csv.gz"))
             self._oi = oi
             op = dict(zip(oi.item_id, oi.open_amount.astype(float)))
-            start = self.bank.booking_date.min()
-            new = it[it.issue_date >= start]  # phase start = first bank line (2025-07-01 LIVE, 2026-01-01 FINAL)
+            start = self.phase_start if self.phase_start is not None else self.bank.booking_date.min()
+            new = it[it.issue_date >= start]  # items issued in the phase (the rest is in open_items_at_start)
             op.update(zip(new.item_id, new.total))
             return op
         op = dict(zip(it.item_id, it.total))

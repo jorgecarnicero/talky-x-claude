@@ -15,6 +15,8 @@ Produce the file from that branch (`python solution/bankrec.py --phase live --ou
 | v2 | `model/v2` | 80.66 | 77.73 | **77.00** | 84.7 % (97.8 / 74.6) | 83.6 % | 48.0 % | + oldest-due subset search, FX in item currency, confirming = latest due on a business day, txt-advice fix |
 | v3 | `model/v3` | 85.28 | 82.90 | **82.25** | 85.4 % (98.3 / 75.4) | 87.4 % | 66.8 % | block A + quick block B (see below) |
 | v3.5 | `model/v3.5` | – | 92.82 | **91.92** | 94.2 % (98.5 / 90.3) dev | 95.7 % dev | 83.3 % dev | v3 + high-precision passes (batches, remittance, AP, non-item) + AR matcher on v3's unidentified receipts — see docs/V35.md |
+| v8b-pf | `model/v8b-pf` | – | 95.96 tune (v8b) | **94.67** | 95.2 % (96.1 / 94.3) | 96.6 % | 90.4 % | hybrid order (v3import_strong first, our matchers, then v3) + ar_guess calibrated best guess + postfix. BEST LIVE |
+| v8b | (same, no postfix) | – | – | **94.58** | 95.2 % (96.2 / 94.2) | 96.6 % | 90.0 % | |
 | v7d-pf | `model/v7d-pf` | – | – | **94.25** | 94.6 % (96.5 / 92.7) | 96.4 % | 90.3 % | v7c code, our matchers before v3import (v7d = 93.89) + best-guess post-processor on UNIDENTIFIED receipts (F1 rewards guesses right > ~47 %). BEST — RUN_FINAL.sh |
 | v7d | (same code, order only) | – | 95.46 tune | **93.89** | 94.2 % (97.9 / 90.8) | 96.4 % | 89.4 % | v7c with ar_match/bigpool/dispute before v3import |
 | v7c | `model/v7c` | – | – | **93.61** | 94.4 % (98.1 / 91.0) | 96.5 % | 87.3 % | v7b + exc_fix R11 (multi-invoice withholding), R12 (duplicate of settled invoice), R13 (stale v3 rows). Current FINAL candidate (RUN_FINAL.sh) |

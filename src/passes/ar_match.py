@@ -17,6 +17,7 @@ WH_COUNTRIES = {"MX", "BR", "MA"}
 WH_RATES = (0.0125, 0.015, 0.10)
 MAX_NODES = 6000
 ZERO_UNITS = True
+N_TO_M = os.environ.get("BANKREC_NO_NTOM") != "1"  # step 6 (team v5): validated Feb-Mar +0.05, on by default
 SUBSET_ALL = False
 DP_MAX_POOL = 80
 FRACTIONS = (0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 0.95)
@@ -495,7 +496,33 @@ class Matcher:
             o = self.sv(i)
             if A > o + tol and refs[i] >= 3 and A - o <= max(0.1 * o, 1.0):
                 return self.rows_for([i], A, fx, {i: "OVERPAYMENT"}), "over"
+        # --- 6. listed invoices in full + the LAST listed one PARTIAL (segment ar_n_to_m)
+        if N_TO_M and evid >= 1.5:
+            r = self.prefix_partial(O, R, A, tol, fx, t, refs)
+            if r:
+                return r
         return None
+
+    def prefix_partial(self, O, R, A, tol, fx, t, refs=None):
+        """The payment clears the invoices listed in the bank text in that order and the LAST listed one absorbs the
+        remainder (PARTIAL). Observed on TRAIN: one customer; the PARTIAL item is the last listed. Only fires when the
+        cash covers every listed invoice but the last one, and all references are exact (strength 3).
+        (An oldest-first variant without references was tested and rejected: 4/880 correct on 2024-10..11.)"""
+        it = self.ix.item
+        Ri = [i for i in R if it[i][0] == "ARI" and self.sv(i) > 0.005]
+        if len(Ri) < 2 or (refs is not None and any(refs.get(i, 0) < 3 for i in Ri)):
+            return None
+        txt = norm(self.text_words(t))
+
+        def pos(i):
+            p = [txt.find(k) for k in (it[i][11], it[i][12]) if k and txt.find(k) >= 0]
+            return min(p) if p else 10 ** 6
+        order = sorted(Ri, key=lambda i: (pos(i), it[i][4], it[i][3]))
+        head, last = order[:-1], order[-1]
+        rem = A - sum(self.sv(i) for i in head)
+        if rem <= max(tol, 0.005) or rem >= self.sv(last) - tol:
+            return None
+        return self.rows_for(order, A, fx, exc_map={last: "PARTIAL"}, amt_map={last: round(rem, 2)}), "nm_ref"
 
     def instalment(self, O, R, A, tol, fx, bdate):
         it = self.ix.item

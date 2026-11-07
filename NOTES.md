@@ -41,3 +41,13 @@ Reproduce: `./run_v35.sh live` (runs team v3, docs extraction, our pipeline, val
 Tune window 2024-10..11 gains per agent: ar_pdf +0.15, exc_fix +0.15 (+0.33 R5), ar_multi +0.12, ar_match rules +0.02.
 Remaining biggest bucket: ~1,360 receipts per 2 months left UNIDENTIFIED though golden has items (payer known for ~500, no amount combo found).
 | 13:48 | tune 2024-10..11: v4 (R5+payer_dir) 94.00 vs v3.5 93.26 (+0.74, same gain as held-out +0.74); R2 exemption for settle/ar_pdf: 94.00 (no effect, kept off) | 94.00 | 93.57 | pending |
+
+## v6-mix (branch model/v6-mix = aryan/matcher 48b181e + team v4 answers + ar_match step 6), held-out 2025-02..03
+All runs with EXC_R5=1 PAYER_DIR=1 and the default PASS_ORDER.
+| run | V3_SUB | step 6 | score | alloc F1 | txn acc | exc F1 |
+|---|---|---|---|---|---|---|
+| A (Aryan v4 as uploaded, LIVE 92.67) | team v3 (model/v3) | off | 94.20 | 95.84 | 96.81 | 86.17 |
+| B | team v4 (model/v4-pdfs b4bb2af) | off | 94.24 | 95.86 | 96.88 | 86.26 |
+| **C** | team v4 | on | **94.29** | 95.88 | 96.92 | 86.36 |
+B vs A: ar_replaced_invoice 88 -> 96 %, ar_duplicate_payment 83 -> 88 %, nothing worse. C vs B: ar_n_to_m 42 -> 46 %, nothing else changed.
+LIVE: team v5 (v3.5 + v4 answers + step 6) scored 92.10 (predicted 92.1-92.2); Aryan v4 92.67.

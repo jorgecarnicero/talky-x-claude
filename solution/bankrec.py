@@ -94,7 +94,50 @@ def parse_amount(s):
     return -v if neg else v
 
 
+UNIDENTIFIED_ONLY_UNKNOWN_PAYER = os.environ.get("BANKREC_UNID_KNOWN") == "1"  # A/B: dev says always flag (81.65 vs 81.35)
 EXC_FULL = {"", "SHORT_DISCOUNT", "SHORT_BANK_CHARGES", "SHORT_WITHHOLDING", "OVERPAYMENT"}
+WITHHOLDING_ENTITIES = {"MX01", "BR01", "MA01"}  # POLICIES §3: some customers in Mexico, Brazil and Morocco
+SEPA_COUNTRIES = set("AT BE BG CY CZ DE DK EE ES FI FR GR HR HU IE IT LT LU LV MT NL PL PT RO SE SI SK IS LI NO CH MC SM "
+                     "AD VA GB GI".split())
+
+_MONTHS = {}
+for _i, _names in enumerate([
+        "ENERO JANUARY JANVIER JANUAR JANEIRO GENNAIO STYCZEN JAN ENE",
+        "FEBRERO FEBRUARY FEVRIER FEBRUAR FEVEREIRO FEBBRAIO LUTY FEB FEV",
+        "MARZO MARCH MARS MAERZ MARZ MARCO MARZEC MAR",
+        "ABRIL APRIL AVRIL APRILE KWIECIEN APR ABR AVR",
+        "MAYO MAY MAI MAIO MAGGIO MAJ",
+        "JUNIO JUNE JUIN JUNI JUNHO GIUGNO CZERWIEC JUN",
+        "JULIO JULY JUILLET JULI JULHO LUGLIO LIPIEC JUL",
+        "AGOSTO AUGUST AOUT AGOSTO SIERPIEN AUG AGO",
+        "SEPTIEMBRE SEPTEMBER SEPTEMBRE SETEMBRO SETTEMBRE WRZESIEN SEP SEPT SET",
+        "OCTUBRE OCTOBER OCTOBRE OKTOBER OUTUBRO OTTOBRE PAZDZIERNIK OCT OKT OUT",
+        "NOVIEMBRE NOVEMBER NOVEMBRE NOVEMBRO LISTOPAD NOV",
+        "DICIEMBRE DECEMBER DECEMBRE DEZEMBER DEZEMBRO DICEMBRE GRUDZIEN DEC DIC DEZ"], 1):
+    for _n in _names.split():
+        _MONTHS[_n] = _i
+_MONTH_RE = re.compile(r"\b(" + "|".join(sorted(_MONTHS, key=len, reverse=True)) + r")\.?\s*'?(\d{2,4})?\b")
+
+
+def service_month(text, bday):
+    """("MANT. MAYO 25" / "SERVICE APRIL 2025") -> (year, month) of the service, else None"""
+    s = strip_acc(text).upper()
+    # only "service month" wording ("MANT. MAYO 25", "SERVICE APRIL 2025"); "PAGO JUNIO" is not a service month
+    kw = re.search(r"\b(MANT\w*|SERVIC\w*|SERVIZ\w*|WARTUNG|ENTRETIEN|MAINT\w*|CUOTA|FEE|MENSUALIDAD|USLUG\w*|"
+                   r"PRESTATION\w*|LEISTUNG\w*|MONTHLY)\b\.?", s)
+    if not kw:
+        return None
+    s = s[kw.start():]
+    for m in _MONTH_RE.finditer(s):
+        mon = _MONTHS[m.group(1)]
+        yy = m.group(2)
+        if yy:
+            y = int(yy) + (2000 if len(yy) == 2 else 0)
+        else:
+            y = bday.year if mon <= bday.month + 1 else bday.year - 1
+        if 2018 <= y <= 2030:
+            return y, mon
+    return None
 
 
 # ----------------------------------------------------------------------------- items
@@ -111,9 +154,11 @@ def load_items(root, phase):
     """Return dict item_id -> Item with open amounts at phase start."""
     items = {}
 
-    def add_files(folder, only=None, open_amt=None):
+    def add_files(folder, only=None, open_amt=None, pred=None):
         for r in rcsv(os.path.join(folder, "ar_invoices.csv.gz")):
             if only is not None and r["item_id"] not in only:
+                continue
+            if pred is not None and not pred(r):
                 continue
             items[r["item_id"]] = Item(id=r["item_id"], typ="ARI", side="AR", entity=r["entity"], party=r["customer_id"],
                                        name=r["customer_name"], doc=r["document_number"], cur=r["currency"],
@@ -122,6 +167,8 @@ def load_items(root, phase):
         for r in rcsv(os.path.join(folder, "ap_invoices.csv.gz")):
             if only is not None and r["item_id"] not in only:
                 continue
+            if pred is not None and not pred(r):
+                continue
             items[r["item_id"]] = Item(id=r["item_id"], typ="API", side="AP", entity=r["entity"], party=r["supplier_id"],
                                        name=r["supplier_name"], doc=r["supplier_invoice_number"], cur=r["currency"],
                                        total=cents(r["total_amount"]), issue=d(r["issue_date"]), due=d(r["due_date"]),
@@ -129,11 +176,15 @@ def load_items(root, phase):
         for r in rcsv(os.path.join(folder, "credit_notes.csv.gz")):
             if only is not None and r["item_id"] not in only:
                 continue
+            if pred is not None and not pred(r):
+                continue
             items[r["item_id"]] = Item(id=r["item_id"], typ=r["side"] + "C", side=r["side"], entity=r["entity"],
                                        party=r["party_id"], name=r["party_name"], doc=r["document_number"],
                                        cur=r["currency"], total=cents(r["total_amount"]), issue=d(r["issue_date"]),
                                        due=d(r["issue_date"]), terms="", po="", related=r["related_document"], pm="")
 
+    if phase == "dev":
+        return load_items_dev(root, add_files, items)
     if phase in ("sample", "train"):
         add_files(os.path.join(root, phase))
         for it in items.values():
@@ -169,12 +220,87 @@ def load_items(root, phase):
     return items
 
 
+DEV_MONTHS = ["202504", "202505"]  # held-out TRAIN months (overridden by --months)
+
+
+def dev_bounds():
+    lo = DEV_MONTHS[0]
+    hi = DEV_MONTHS[-1]
+    start = date(int(lo[:4]), int(lo[4:]), 1)
+    y, m = int(hi[:4]), int(hi[4:]) + 1
+    if m == 13:
+        y, m = y + 1, 1
+    end = date(y, m, 1) - timedelta(days=1)
+    return start, end
+
+
+def load_items_dev(root, add_files, items):
+    """Open items at the start of the held-out window, rebuilt from the TRAIN golden; plus items issued in the window.
+    Items fully settled in the 120 days before the window are kept with open=0 (for duplicate detection)."""
+    start, end = dev_bounds()
+    cache = os.path.join(root, "solution", "cache", f"dev_items_{DEV_MONTHS[0]}_{DEV_MONTHS[-1]}.pkl")
+    if os.path.exists(cache):
+        with open(cache, "rb") as fh:
+            items.update(pickle.load(fh))
+        log(f"dev items from cache: {len(items)}")
+        return items
+    tr = os.path.join(root, "train")
+    before = {}
+    for t in rcsv(os.path.join(tr, "bank_transactions.csv.gz")):
+        bd = d(t["booking_date"])
+        if bd < start:
+            before[t["bank_txn_id"]] = bd
+    paid = defaultdict(int)
+    last_paid = {}
+    for r in rcsv(os.path.join(tr, "golden_allocations.csv.gz")):
+        bd = before.get(r["bank_txn_id"])
+        if bd is None or not r["item_id"]:
+            continue
+        a = cents(r["amount"])
+        if r["exception"] == "RETURNED":
+            paid[r["item_id"]] -= a
+        elif r["exception"] == "DUPLICATE_PAYMENT":
+            continue
+        else:
+            paid[r["item_id"]] += a
+            last_paid[r["item_id"]] = max(bd, last_paid.get(r["item_id"], bd))
+    recent = start - timedelta(days=120)
+    end_s = end.isoformat()
+
+    def pred(r):
+        if r["issue_date"] > end_s:
+            return False
+        iid = r["item_id"]
+        if cents(r["total_amount"]) - paid.get(iid, 0) > 0:
+            return True
+        lp = last_paid.get(iid)
+        return lp is not None and lp >= recent
+
+    add_files(tr, pred=pred)
+    keep = {}
+    for iid, it in items.items():
+        if it.issue and it.issue > end:
+            continue
+        it.open = max(0, it.total - paid.get(iid, 0))
+        if it.open > 0 or (last_paid.get(iid) and last_paid[iid] >= recent):
+            keep[iid] = it
+    items.clear()
+    items.update(keep)
+    os.makedirs(os.path.dirname(cache), exist_ok=True)
+    with open(cache, "wb") as fh:
+        pickle.dump(keep, fh)
+    log(f"dev items: {len(items)} (open at {start} or settled recently)")
+    return items
+
+
 # ----------------------------------------------------------------------------- matcher state
 class Rec:
     def __init__(self, root, phase):
         self.root, self.phase = root, phase
         self.items = load_items(root, phase)
         log(f"{len(self.items)} items loaded")
+        self.payer_known = set()
+        self.settled_by_row = {}  # cheque / direct-debit receipt -> item it settled (for later returns)
         self.out = {}  # bank_txn_id -> list of rows (item_id, amount_cents, category, exception)
         self.why = {}  # bank_txn_id -> matcher name
         self._index_items()
@@ -197,6 +323,8 @@ class Rec:
                         self.by_digits[(it.entity, k)].append(it)
             if it.po and it.side == "AR":
                 self.by_doc["PO:" + nalnum(it.po)].append(it)
+            if it.typ == "APC" and it.related:
+                self.by_doc["REL:" + nalnum(it.related)].append(it)
         for lst in self.by_party.values():
             lst.sort(key=lambda x: (x.issue or date.min, x.id))
 
@@ -374,7 +502,7 @@ class Rec:
                    "final": ("202601", "202606")}
 
     def month_window(self, before=3, after=1):
-        lo, hi = self.PHASE_RANGE[self.phase]
+        lo, hi = (DEV_MONTHS[0], DEV_MONTHS[-1]) if self.phase == "dev" else self.PHASE_RANGE[self.phase]
 
         def shift(ym, k):
             y, m = int(ym[:4]), int(ym[4:]) + k
@@ -453,6 +581,7 @@ class Rec:
             if rows[0]["run_type"] == "aggregated":
                 tot = sum(cents(x["document_amount"]) for x in rows)
                 agg_by_amt[(rows[0]["debtor_account_id"], tot)].append(rid)
+        self.cs_rows, self.cq_rows, self.pr_e2e = cs, cq, pr_e2e
         log(f"aux: {len(dd)} dd batches, {len(cs)} card settl., {len(cq)} cheque dep., {len(pr_run)} payment runs")
 
         used_batch = set()
@@ -482,6 +611,7 @@ class Rec:
                         it = self.dd_item(r, t["entity"])
                         if it:
                             rows.append((it, cents(r["amount"]), ""))
+                            self.settled_by_row[("DD", r["end_to_end_id"])] = it
                     if rows:
                         self.assign(t, rows, "dd_batch")
                         n["dd_batch"] += 1
@@ -516,7 +646,12 @@ class Rec:
                             did = c[0]
                 if did:
                     used_batch.add(did)
-                    rows = [x for x in (self.cheque_item(r, t["entity"]) for r in cq[did]) if x]
+                    rows = []
+                    for r in cq[did]:
+                        x = self.cheque_item(r, t["entity"])
+                        if x:
+                            rows.append(x)
+                            self.settled_by_row[("CHQ", r["cheque_number"].lstrip("0"), cents(r["amount"]))] = x[0]
                     if rows:
                         self.assign(t, rows, "cheque")
                         n["cheque"] += 1
@@ -572,7 +707,7 @@ class Rec:
                     return it
         return None
 
-    def cheque_item(self, r, entity):
+    def cheque_item(self, r, entity, settled_ok=False):
         a = cents(r["amount"])
         ref = r["stub_reference"]
         if ref:
@@ -592,7 +727,7 @@ class Rec:
                 sc[p] += self.idf.get(tk, 0)
         for p, _ in sc.most_common(5):
             for it in self.by_party.get(p, ()):
-                if it.typ == "ARI" and it.open == a:
+                if it.typ == "ARI" and (it.open == a or (settled_ok and it.open == 0 and it.total == a)):
                     return (it, a, "")
         return None
 
@@ -673,35 +808,127 @@ class Rec:
 
     # ============================================================== pass 2: DD returns / chargebacks
     def pass_returns(self, txns):
+        """R-transactions: direct-debit returns, returned cheques, card chargebacks, our transfers rejected."""
         mandate_rows = defaultdict(list)
         for bid, rows in self.dd_rows.items():
             for r in rows:
                 mandate_rows[r["mandate_id"]].append(r)
-        n = 0
+        cheque_rows = defaultdict(list)
+        for did, rows in self.cq_rows.items():
+            for r in rows:
+                cheque_rows[r["cheque_number"].lstrip("0")].append(r)
+        card_rows = defaultdict(list)
+        for sid, rows in self.cs_rows.items():
+            for r in rows:
+                card_rows[r["card"][-4:]].append(r)
+        n = Counter()
         for t in txns:
             if t["bank_txn_id"] in self.out:
                 continue
             amt = cents(t["amount"])
-            if amt >= 0:
+            blob = " ".join([t["text"], t["remittance_info"], t["ref2"], t["end_to_end_id"]])
+            ublob = strip_acc(blob).upper()
+            if amt < 0:
+                # --- SEPA/BACS/ACH direct-debit return: mandate id
+                m = re.search(r"VTM-[A-Z]{2}-\d{7}", blob)
+                if m:
+                    bday_s = t["booking_date"]
+                    rows = [r for r in mandate_rows.get(m.group(0), []) if cents(r["amount"]) == -amt
+                            and r["collection_date"] <= bday_s]
+                    batch_ids = set(re.findall(r"\d{11}", blob))
+                    rows.sort(key=lambda r: (r["batch_id"] in batch_ids, r["collection_date"]), reverse=True)
+                    it = None
+                    if rows:
+                        it = self.settled_by_row.get(("DD", rows[0]["end_to_end_id"])) or                             self.dd_item(rows[0], t["entity"])
+                    if not it:
+                        p = self.party_by_mandate.get(m.group(0))
+                        c = [i for i in self.by_party.get(p, ()) if i.typ == "ARI" and i.total == -amt]
+                        if c:
+                            c.sort(key=lambda i: i.issue, reverse=True)
+                            it = c[0]
+                    if it:
+                        self.assign(t, [(it, -amt, "RETURNED")], "dd_return")
+                        n["dd_return"] += 1
+                        continue
+                # --- returned cheque: cheque number
+                if re.search(r"RETURNED ITEM|CHQ IMPAYE|CHEQUE IMPAYE|CHEQUE DEVUELTO|IMPAYE CHQ|CHEQUE RETOURNE|"
+                             r"RCHQ|CHEQUE IMPAYÉ", ublob + " " + t["bank_code"]):
+                    it = None
+                    for num in re.findall(r"\b\d{6,8}\b", blob):
+                        rows = [r for r in cheque_rows.get(num.lstrip("0"), []) if cents(r["amount"]) == -amt]
+                        if rows:
+                            it = self.settled_by_row.get(("CHQ", num.lstrip("0"), -amt))
+                            if not it:
+                                x = self.cheque_item(rows[0], t["entity"], settled_ok=True)
+                                it = x[0] if x else None
+                            if it:
+                                break
+                    if it:
+                        self.assign(t, [(it, -amt, "RETURNED")], "cheque_return")
+                        n["cheque_return"] += 1
+                        continue
+                # --- card chargeback: order number, else card mask + amount
+                if re.search(r"CONTRACARGO|CHARGEBACK|RUECKBELASTUNG|IMPAYE CARTE|STORNO KARTE|CHARGE BACK", ublob)                         or "CHRG" in t["bank_code"]:
+                    it = None
+                    for tok in re.findall(r"[A-Z]{2,4}\d{2}-?\d{5,}", ublob):
+                        c = [i for i in self.find_doc(tok, side="AR", entity=t["entity"]) if i.typ == "ARI"]
+                        if c:
+                            it = c[0]
+                            break
+                    if not it:
+                        mm = re.search(r"\*{2,}(\d{4})", blob)
+                        if mm:
+                            rows = [r for r in card_rows.get(mm.group(1), []) if cents(r["gross"]) == -amt
+                                    and r["account_id"] == t["account_id"]]
+                            rows.sort(key=lambda r: r["settlement_date"], reverse=True)
+                            for r in rows:
+                                c = self.find_doc(r["order_number"], side="AR", entity=t["entity"])
+                                if c:
+                                    it = c[0]
+                                    break
+                    if it:
+                        self.assign(t, [(it, -amt, "RETURNED")], "chargeback")
+                        n["chargeback"] += 1
+                        continue
+            else:
+                # --- our transfer to a supplier rejected by the beneficiary bank: payment-run end-to-end id
+                if re.search(r"RETURN|DEVOLUCION TRANSF|RETOUR|RUECKUEBERWEISUNG|RUCKUBERWEISUNG|REJECT|RECHAZ|"
+                             r"DEVOLUCAO", ublob) or "RRTN" in t["bank_code"]:
+                    rows = None
+                    for tok in re.findall(r"(?:PR|CF)\d{12}-\d{4}", blob):
+                        if tok in self.pr_e2e:
+                            rows = self.pr_e2e[tok]
+                            break
+                    if rows:
+                        its = self.run_items(rows)
+                        if its:
+                            self.assign(t, [(it, a, "RETURNED") for it, a, _ in its], "transfer_return")
+                            n["transfer_return"] += 1
+                            continue
+        log("pass returns:", dict(n))
+
+    # ============================================================== pass 2b: explicit wording -> category
+    def pass_keywords(self, txns):
+        n = Counter()
+        for t in txns:
+            if t["bank_txn_id"] in self.out:
                 continue
-            m = re.search(r"VTM-[A-Z]{2}-\d{7}", t["text"] + " " + t["remittance_info"] + " " + t["ref2"])
-            if not m:
-                continue
-            rows = [r for r in mandate_rows.get(m.group(0), []) if cents(r["amount"]) == -amt]
-            it = None
-            if rows:
-                rows.sort(key=lambda r: r["collection_date"], reverse=True)
-                it = self.dd_item(rows[0], t["entity"])
-            if not it:
-                p = self.party_by_mandate.get(m.group(0))
-                c = [i for i in self.by_party.get(p, ()) if i.typ == "ARI" and i.total == -amt]
-                if c:
-                    c.sort(key=lambda i: i.issue, reverse=True)
-                    it = c[0]
-            if it:
-                self.assign(t, [(it, -amt, "RETURNED")], "dd_return")
-                n += 1
-        log("pass returns:", n)
+            amt = cents(t["amount"])
+            u = strip_acc(" ".join([t["text"], t["remittance_info"], t["ref2"]])).upper()
+            cat = None
+            if amt > 0 and re.search(r"PROFORMA|PRO-FORMA|\bPF\d{2}-\d{4,}", u):
+                cat = "CUSTOMER_ADVANCE"  # a proforma is not an invoice (POLICIES §4)
+            elif amt > 0 and re.search(r"PAGO DOBLE|PAGO DUPLICADO|DUPLICAD|DUPLICATE|DOUBLE PAIEMENT|DOPPELZAHLUNG|"
+                                       r"DOBLE\*|PAGAMENTO DUPLICADO", u):
+                cat = "SUPPLIER_REFUND"  # supplier gives back a payment we made twice
+            elif amt < 0 and re.search(r"REFUND DUPLICATE|DEVOLUCION PAGO DUPLICADO|REMBOURSEMENT DOUBLE|"
+                                       r"RUECKERSTATTUNG DOPPEL|ERSTATTUNG DOPPEL|DEVOLUCAO PAGAMENTO DUPLICADO|"
+                                       r"REFUND DOUBLE|DEVOLUCION DUPLICADO", u):
+                cat = "CUSTOMER_REFUND"
+            if cat:
+                self.category(t, cat, why="kw_" + cat.lower())
+                n[cat] += 1
+        log("pass keywords:", dict(n))
 
     # ============================================================== pass 3: remittance advices
     def load_remittances(self):
@@ -866,11 +1093,14 @@ class Rec:
             refs = self.ref_candidates(t, side)
             if amt > 0:
                 refs += [i for i in self.ref_candidates(t, "AP") if i.typ == "APC"]
+                refs += self.apc_by_related(t)
             else:
                 refs += [i for i in self.ref_candidates(t, "AR") if i.typ == "ARC"]
             if not refs:
                 continue
             r = self.match_amount(t, refs, amt)
+            if not r and not any(i.open > 0 for i in refs if i.typ in ("ARI", "API")):
+                r = self.dup_check(t, refs, amt)
             if not r:
                 r = self.fill_from_party(t, refs, amt)
             if not r:
@@ -879,6 +1109,40 @@ class Rec:
                 self.assign(t, r[0], "ref_" + r[1])
                 n[r[1]] += 1
         log("pass refs:", dict(n))
+
+    def apc_by_related(self, t):
+        """supplier refunds quote the original invoice ("REEMBOLSO FRA FAC2500090"): its credit note is AB-FAC2500090"""
+        txt = " ".join([t["text"], t["ref2"], t["remittance_info"]]).upper()
+        out = []
+        for tok in re.findall(r"[A-Z0-9][A-Z0-9/\-\.]{3,}[A-Z0-9]", txt):
+            out += [i for i in self.by_doc.get("REL:" + nalnum(tok), []) if i.open > 0]
+        return out
+
+    def dup_check(self, t, cands, amt, max_age_days=400):
+        """the item was already settled and is paid again (POLICIES §3 DUPLICATE_PAYMENT)"""
+        bday = d(t["booking_date"])
+        best = None
+        for c in cands:
+            if c.typ not in ("ARI", "API") or c.open != 0:
+                continue
+            if c.issue and (bday - c.issue).days > max_age_days:
+                continue
+            T = self.line_in_item_cur(t, c, amt)
+            if T is None:
+                continue
+            same_cur = c.cur == t["currency"]
+            if (same_cur and T == c.total) or (not same_cur and abs(T - c.total) <= 0.03 * c.total):
+                if best is None or (c.issue or date.min) > (best.issue or date.min):
+                    best = c
+        if best:
+            return [(best, self.line_in_item_cur(t, best, amt), "DUPLICATE_PAYMENT")], "duplicate"
+        return None
+
+    def settled_items_of(self, parties, side):
+        out = []
+        for p in parties:
+            out += [i for i in self.by_party.get(p, ()) if i.side == side and i.open == 0]
+        return out
 
     def fill_from_party(self, t, refs, amt):
         """referenced items are part of the payment (text truncated): complete with other open items of the payer"""
@@ -942,10 +1206,20 @@ class Rec:
                 return val == target
             return abs(val - target) <= max(2, 0.03 * target)  # FX tolerance
 
-        # 1. single exact
-        for c in cands:
-            if c.typ in ("ARI", "API") and eq(c, c.open, tgt(c)):
-                return [(c, c.open, "")], "exact"
+        # 1. single exact (several same-amount invoices: the service month named in the text, else oldest)
+        exact = [c for c in cands if c.typ in ("ARI", "API") and eq(c, c.open, tgt(c))]
+        if exact:
+            if len(exact) > 1:
+                sm = service_month(" ".join([t["text"], t["remittance_info"], t["ref2"]]), bday)
+                if sm:
+                    # monthly fees are invoiced at the start of the following month
+                    y, m = sm[0], sm[1] + 1
+                    if m == 13:
+                        y, m = y + 1, 1
+                    hit = [c for c in exact if c.issue and (c.issue.year, c.issue.month) == (y, m)]
+                    if hit:
+                        return [(hit[0], hit[0].open, "")], "exact_month"
+            return [(exact[0], exact[0].open, "")], "exact"
         # credit note refunded / paid out
         for c in cands:
             if c.typ in ("ARC", "APC") and eq(c, c.open, tgt(c)):
@@ -957,14 +1231,28 @@ class Rec:
                 if da[1]:
                     return [(c, c.open, "SHORT_DISCOUNT")], "discount"
                 return [(c, tgt(c), "PARTIAL")], "discount_late"
-        # 3. withholding / bank charges on single item
+        # 3. withholding (MX/BR/MA customers only) / guarantee retention / bank charges on a single item
+        non_sepa = self._non_sepa(t)
         for c in cands:
             T = tgt(c)
-            if c.typ != "ARI" or T is None or T >= c.open:
+            if c.typ != "ARI" or T is None or T >= c.open or c.open != c.total:
                 continue
-            for rate in (0.0125, 0.015, 0.10):
-                if abs(c.open - int(round(c.total * rate)) - T) <= 1 and c.open == c.total:
-                    return [(c, c.open, "SHORT_WITHHOLDING")], "withholding"
+            if c.entity in WITHHOLDING_ENTITIES:
+                for rate in (0.0125, 0.015, 0.10):
+                    if abs(c.total - int(round(c.total * rate)) - T) <= 1:
+                        return [(c, c.open, "SHORT_WITHHOLDING")], "withholding"
+            for rate in (0.05, 0.10):
+                if abs(c.total - int(round(c.total * rate)) - T) <= 1:
+                    return [(c, T, "PARTIAL")], "retention"
+        if non_sepa:
+            for c in cands:
+                T = tgt(c)
+                if c.typ != "ARI" or T is None or T >= c.open or c.cur != t["currency"]:
+                    continue
+                short = c.open - T
+                eur = self.convert(short, c.cur, "EUR", bday) or short
+                if eur <= 6000 and short <= 0.02 * c.open:
+                    return [(c, c.open, "SHORT_BANK_CHARGES")], "bank_charges"
         # 4. subsets per item currency (credit notes netted)
         by_cur = defaultdict(list)
         for c in cands:
@@ -1009,14 +1297,9 @@ class Rec:
                 c = inv[0]
                 T = tgt(c)
                 if T is not None and T < c.open:
-                    # bank charges on cross-border receipts
-                    short = c.open - T
-                    eur = self.convert(short, c.cur, "EUR", bday) or short
-                    if c.typ == "ARI" and t["currency"] == c.cur and eur <= 6000 and short <= 0.02 * c.open \
-                            and self._non_sepa(t):
-                        return [(c, c.open, "SHORT_BANK_CHARGES")], "bank_charges"
                     return [(c, T, "PARTIAL")], "partial"
-                if T is not None and T > c.open and c.typ == "ARI":
+                # overpayment: a single invoice paid with a small excess (multi-invoice payments are not overpayments)
+                if T is not None and c.open < T <= c.open * 1.105 and c.typ == "ARI":
                     return [(c, c.open, "OVERPAYMENT")], "overpay"
             # several referenced: allocate all fully if sum close
         return None
@@ -1077,8 +1360,12 @@ class Rec:
         return T is not None and abs(tot - T) <= 0.03 * T
 
     def _non_sepa(self, t):
-        txt = (t["text"] + " " + t["bank_code"]).upper()
-        return bool(re.search(r"SWIFT|EXTERIOR|DIV|FOREIGN|INTERNATIONAL|13/|XBCT|\bINT", txt)) or bool(t["orig_currency"])
+        txt = (t["text"] + " " + t["bank_code"] + " " + t["remittance_info"]).upper()
+        if re.search(r"SWIFT|EXTERIOR|EN DIV|FOREIGN|INTERNATIONAL|XBCT|GASTOS SHA|\bSHA\b|\bBEN\b|^13$|TT IN|WIRE",
+                     txt) or t["bank_code"].startswith("13") or t["orig_currency"]:
+            return True
+        iban = t["counterparty_account"] or ""
+        return bool(iban) and iban[:2] not in SEPA_COUNTRIES
 
     # ============================================================== pass 5: payer + amount
     def pass_party(self, txns):
@@ -1089,8 +1376,19 @@ class Rec:
             amt = cents(t["amount"])
             side = "AR" if amt > 0 else "AP"
             parties = self.identify_party(t, side)
+            if amt > 0:
+                sup = [(p, sc) for p, sc in self.identify_party(t, "AP") if sc >= 0.75][:5]
+                if sup and (not parties or sup[0][1] > parties[0][1]):
+                    # incoming money from a supplier: refund of one of its credit notes (settles the APC item)
+                    cands = [i for i in self.open_items_of([p for p, _ in sup], "AP") if i.typ == "APC"]
+                    r = self.match_amount(t, cands, amt) if cands else None
+                    if r:
+                        self.assign(t, r[0], "party_supplier_" + r[1])
+                        n["supplier_" + r[1]] += 1
+                        continue
             if not parties:
                 continue
+            self.payer_known.add(t["bank_txn_id"])
             best = parties[0][1]
             top = [p for p, s in parties if s >= best - 0.25][:10]
             # each candidate party alone (amount disambiguates homonyms), then with its group members
@@ -1108,6 +1406,11 @@ class Rec:
                     self.assign(t, r[0], "party_" + r[1])
                     n[r[1]] += 1
                     break
+            else:
+                r = self.dup_check(t, self.settled_items_of(top[:3], side), amt, max_age_days=200)
+                if r:
+                    self.assign(t, r[0], "party_" + r[1])
+                    n[r[1]] += 1
         log("pass party:", dict(n))
 
     # ============================================================== pass 6: categories
@@ -1120,7 +1423,10 @@ class Rec:
             cat = model.predict(t)
             if cat is None or cat == "ITEM":
                 cat = "UNIDENTIFIED" if amt > 0 else "BANK_FEES"
-            self.category(t, cat, "UNIDENTIFIED" if cat == "UNIDENTIFIED" else "", why="cat")
+            exc = "UNIDENTIFIED" if cat == "UNIDENTIFIED" else ""
+            if cat == "UNIDENTIFIED" and UNIDENTIFIED_ONLY_UNKNOWN_PAYER and t["bank_txn_id"] in self.payer_known:
+                exc = ""  # payer recognised but amount not explained: most likely a payment we failed to match
+            self.category(t, cat, exc, why="cat" if not exc and cat == "UNIDENTIFIED" else "cat")
             n[cat] += 1
         log("pass categories:", dict(n.most_common(8)))
 
@@ -1310,15 +1616,15 @@ class CatModel:
                 (t["bank"], t["bank_code"], t["bank_subcode"], sg),
                 (t["bank_code"], sg)]
 
-    def fit(self, root, folder):
-        log("training category model on", folder)
+    def fit(self, root, folder, exclude_months=()):
+        log("training category model on", folder, "excluding", list(exclude_months))
         lab = {}
         for r in rcsv(os.path.join(root, folder, "golden_allocations.csv.gz")):
             if r["bank_txn_id"] not in lab:
                 lab[r["bank_txn_id"]] = r["category"] or "ITEM"
         for t in rcsv(os.path.join(root, folder, "bank_transactions.csv.gz")):
             y = lab.get(t["bank_txn_id"])
-            if y is None:
+            if y is None or t["booking_date"][:7].replace("-", "") in exclude_months:
                 continue
             for i, k in enumerate(self.keys(t)):
                 self.tabs[i]["|".join(k)][y] += 1
@@ -1349,30 +1655,38 @@ class CatModel:
 
 # ----------------------------------------------------------------------------- main
 def main():
+    global DEV_MONTHS
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    ap.add_argument("--phase", default="sample", choices=["sample", "train", "live", "final"])
+    ap.add_argument("--phase", default="sample", choices=["sample", "dev", "train", "live", "final"])
+    ap.add_argument("--months", default=",".join(DEV_MONTHS), help="held-out TRAIN months for --phase dev (YYYYMM,...)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--why", default=None, help="optional csv with the matcher used per line (for debugging)")
     a = ap.parse_args()
     root = os.path.abspath(a.data)
     out = a.out or f"sub_{a.phase}.csv.gz"
+    DEV_MONTHS = sorted(a.months.split(","))
 
     model = CatModel()
-    mp = os.path.join(root, "solution", "cache", "catmodel.json")
+    excl = DEV_MONTHS if a.phase == "dev" else []
+    mp = os.path.join(root, "solution", "cache", "catmodel%s.json" % ("_excl_" + "_".join(excl) if excl else ""))
     if os.path.exists(mp):
         model.load(mp)
     else:
         os.makedirs(os.path.dirname(mp), exist_ok=True)
-        model.fit(root, "train")
+        model.fit(root, "train", exclude_months=set(excl))
         model.save(mp)
 
     rec = Rec(root, a.phase)
-    txns = list(rcsv(os.path.join(root, a.phase, "bank_transactions.csv.gz")))
+    folder = "train" if a.phase == "dev" else a.phase
+    txns = list(rcsv(os.path.join(root, folder, "bank_transactions.csv.gz")))
+    if a.phase == "dev":
+        txns = [t for t in txns if t["booking_date"][:7].replace("-", "") in set(DEV_MONTHS)]
     txns.sort(key=lambda t: (t["booking_date"], t["bank_txn_id"]))
     log(f"{len(txns)} bank lines")
     rec.pass_batches(txns)
     rec.pass_returns(txns)
+    rec.pass_keywords(txns)
     rec.pass_remittance(txns)
     rec.pass_refs(txns)
     rec.pass_party(txns)

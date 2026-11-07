@@ -1701,6 +1701,17 @@ class CatModel:
 
 
 # ----------------------------------------------------------------------------- main
+def _guards(root, phase):
+    """live/final: abort without pdftotext or with an incomplete masters_final (src/guards.py; never changes an answer)."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+    try:
+        import guards
+    except ImportError:
+        log("WARNING: src/guards.py not found: pdftotext / masters_final checks skipped")
+        return
+    guards.check_all(root, phase)
+
+
 def main():
     global DEV_MONTHS
     ap = argparse.ArgumentParser()
@@ -1711,6 +1722,7 @@ def main():
     ap.add_argument("--why", default=None, help="optional csv with the matcher used per line (for debugging)")
     a = ap.parse_args()
     root = os.path.abspath(a.data)
+    _guards(root, a.phase)
     out = a.out or f"sub_{a.phase}.csv.gz"
     DEV_MONTHS = sorted(a.months.split(","))
 

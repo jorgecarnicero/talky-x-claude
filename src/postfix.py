@@ -5,7 +5,9 @@ Only rows with empty item and category UNIDENTIFIED (amount > 0) are touched; it
 import argparse, csv, gzip, os, re, sys, unicodedata, itertools, json
 import pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(HERE, '..', '..', 'claude-talky-accounting', 'dataroot'))
+sys.path.insert(0, HERE)
+from data import DEFAULT_DATA  # noqa: E402
+ROOT = DEFAULT_DATA
 
 def norm(s):
     s = unicodedata.normalize('NFKD', str(s)).encode('ascii', 'ignore').decode().upper()

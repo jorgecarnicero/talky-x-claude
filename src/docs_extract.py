@@ -2,7 +2,7 @@
 
     .venv/bin/python src/docs_extract.py --phase train|live|final [--only ra|pdf] [--workers 3]
 
-Outputs (under CACHE = ../cache):
+Outputs (under data.CACHE, default <repo>/cache/cascade):
     docs_ra_<phase>.parquet   one row per remittance-advice line (header fields repeated)
     docs_pdf_<phase>.parquet  one row per document PDF with parsed free-text clauses
 

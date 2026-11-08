@@ -1,13 +1,16 @@
 """Show wrong bank lines of some segments: bank line, golden rows, our rows and the matcher that fired.
 
-    python solution/bankrec.py --phase sample --out sub_sample.csv.gz --why why_sample.csv
-    python solution/tools/diagnose.py sub_sample.csv.gz why_sample.csv ar_ref_noise,ap_confirming [--n 5]
+    python backbone/bankrec.py --phase sample --out sub_sample.csv.gz --why why_sample.csv
+    python tools/diagnose.py sub_sample.csv.gz why_sample.csv ar_ref_noise,ap_confirming [--n 5]
 """
 import argparse
 import csv
 import gzip
 import random
 from collections import Counter, defaultdict
+import os
+
+DATA = os.environ.get("BANKREC_DATA", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data"))
 
 
 def rd(p):
@@ -33,7 +36,7 @@ def main():
     ap.add_argument("--phase", default="sample", choices=["sample", "train", "dev"])
     ap.add_argument("--n", type=int, default=4)
     a = ap.parse_args()
-    D = "solution/cache/dev_202504_202505/" if a.phase == "dev" else a.phase + "/"
+    D = os.path.join(DATA, "_cache", "dev_202504_202505")+"/" if a.phase == "dev" else os.path.join(DATA, a.phase) + "/"
     bt = {r["bank_txn_id"]: r for r in rd(D + "bank_transactions.csv.gz")}
     why = {r["bank_txn_id"]: r["why"] for r in rd(a.why)}
     S, G, seg = defaultdict(list), defaultdict(list), {}

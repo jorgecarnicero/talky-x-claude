@@ -1,6 +1,6 @@
 """Check a submission against the FORMAT.md validation rules before uploading.
 
-    python solution/tools/validate.py sub_live_v2.csv.gz --phase live
+    python tools/validate.py sub_live_v2.csv.gz --phase live
 """
 import argparse
 import csv

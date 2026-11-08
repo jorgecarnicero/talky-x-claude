@@ -1,0 +1,8 @@
+# Runtime dependencies (versions the final submission was produced with, Python 3.11)
+pandas==3.1.1
+numpy==2.4.6
+pyarrow==26.0.1
+PyMuPDF==2.1
+openpyxl==3.1.5
+# System dependency: poppler's `pdftotext` on PATH (macOS: brew install poppler; Debian/Ubuntu: apt install poppler-utils;
+# Windows: ships with Git Bash)

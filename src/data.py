@@ -1,7 +1,7 @@
 """Data loading + shared context (ledger of open items, results) for all passes.
 
 Layout expected under DATA root (see README): masters/, train/, live/, final/ (+ final/masters_final/), starter/.
-Big tables are cached as parquet under ../cache (outside git).
+Big tables are cached as parquet under <repo>/cache/cascade (gitignored, override with BANKREC_CACHE).
 """
 import os
 import re
@@ -12,12 +12,9 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-# Team layout (talky-x-claude main): data extracted at the repo root (masters/, train/, live/, final/, starter/).
-# Lead's layout: data in ../dataroot. Env vars override both.
-_TEAM = os.path.isdir(os.path.join(REPO, "masters"))
-DEFAULT_DATA = os.environ.get("BANKREC_DATA", REPO if _TEAM else os.path.join(REPO, "..", "dataroot"))
-CACHE = os.environ.get("BANKREC_CACHE", os.path.join(REPO, "solution", "cache", "v35") if _TEAM
-                       else os.path.join(REPO, "..", "cache"))
+# Data archives are extracted into <repo>/data (gitignored); parquet caches go to <repo>/cache. Env vars override.
+DEFAULT_DATA = os.environ.get("BANKREC_DATA", os.path.join(REPO, "data"))
+CACHE = os.environ.get("BANKREC_CACHE", os.path.join(REPO, "cache", "cascade"))
 
 PHASE_CHAIN = {"sample": ["sample"], "train": ["train"], "live": ["train", "live"], "final": ["train", "live", "final"]}
 EXCEPTIONS = ["PARTIAL", "OVERPAYMENT", "SHORT_DISCOUNT", "SHORT_BANK_CHARGES", "SHORT_WITHHOLDING", "SHORT_DISPUTE",

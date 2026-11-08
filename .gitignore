@@ -1,34 +1,33 @@
-# ---- hackathon data: every teammate extracts the archives locally (see solution/README.md)
-/train/
-/live/
-/final/
-/sample/
-/masters/
-/bankrec-*/
+# Hackathon data: extract the archives into data/ (see README). Never committed.
+/data/
+/data_dev/
 *.tar.gz
 *.zip
 
-# CSV data (raw, gzipped and submissions)
+# Generated: caches, run outputs, submissions (except the archived final file)
+/cache/
+/out/
+_cache/
 *.csv
 *.csv.gz
 *.CSV
+!/submissions/sub_final_v8d_pf130.csv.gz
 
-# raw data formats, in case they appear elsewhere
+# Raw data formats, in case they appear elsewhere
 *.pdf
 *.xlsx
 *.n43
 *.sta
 *.xml
 
-# local environment / caches
+# Python / tooling
 .venv/
-solution/cache/
 __pycache__/
 *.pyc
+*.egg-info/
+.claude/
 
-# macOS metadata from the extracted archives
+# OS metadata
 ._*
 .DS_Store
-
-# v3.5 python env
-/.venv/
+Thumbs.db

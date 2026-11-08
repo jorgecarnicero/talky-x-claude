@@ -1,11 +1,14 @@
 """Which segments lose the most allocation rows (allocation F1 = 50 % of the score)?
 
-    python solution/tools/rowloss.py sub_sample.csv.gz [--phase sample] [--top 20]
+    python tools/rowloss.py sub_sample.csv.gz [--phase sample] [--top 20]
 """
 import argparse
 import csv
 import gzip
 from collections import Counter
+import os
+
+DATA = os.environ.get("BANKREC_DATA", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data"))
 
 
 def main():
@@ -19,7 +22,7 @@ def main():
         if r["item_id"]:
             sub[(r["bank_txn_id"], r["item_id"])] = float(r["amount"])
     tot, tp, gold = Counter(), Counter(), set()
-    for r in csv.DictReader(gzip.open(("solution/cache/dev_202504_202505" if a.phase == "dev" else a.phase) + "/golden_allocations.csv.gz", "rt", encoding="utf-8")):
+    for r in csv.DictReader(gzip.open((os.path.join(DATA, "_cache", "dev_202504_202505")+"" if a.phase == "dev" else os.path.join(DATA, a.phase)) + "/golden_allocations.csv.gz", "rt", encoding="utf-8")):
         if not r["item_id"]:
             continue
         k = (r["bank_txn_id"], r["item_id"])

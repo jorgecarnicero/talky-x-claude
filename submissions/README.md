@@ -1,6 +1,15 @@
-# FINAL submission candidates (not uploaded yet — the team uploads ONE file)
+# FINAL submission
 
-| file | code | LIVE score of the method | notes |
-|---|---|---|---|
-| sub_final_v8c_pf130.csv.gz | model/v8b-pf (commit 700bf5f) | 94.67 (v8b-pf) | v8b + ZA01 'EFT CREDIT' payer pattern + postfix --win 130. VALID, 220,256 lines. KNOWN BUG: 766 wrong DUPLICATE_PAYMENT rows on card settlements (card order numbers repeat across entities in FINAL; the order cache was keyed by number only) |
-| **sub_final_v8d_pf130.csv.gz** | this branch: src/ (v8d) + RUN_FINAL_v8d.sh | 94.67 | **UPLOADED FINAL FILE.** = v8c + card order cache keyed by (order, entity): DUPLICATE_PAYMENT rows 1,526 -> 763. VALID, 220,256 lines, UNIDENTIFIED 4.9 % of receipts |
+`sub_final_v8d_pf130.csv.gz` is the single file the team submitted for the blind FINAL phase.
+
+| | |
+|---|---|
+| Code | tag `v8d-final` (= this repository's `scripts/run.sh final`) |
+| FINAL score | **95.06** |
+| Method score on LIVE | 94.67 |
+| Rows | 220,256 (validated) |
+| Receipts left `UNIDENTIFIED` | 4.9 % |
+
+Difference from the previous candidate (v8c): the card-order cache is keyed by (order number, entity) instead of the order
+number alone, because card order numbers repeat across entities in FINAL. This halved the `DUPLICATE_PAYMENT` rows
+(1,526 → 763).

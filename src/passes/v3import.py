@@ -1,4 +1,4 @@
-"""Import the team's v3 answers (solution/bankrec.py on main/model/v3) as a pass.
+"""Import the team's v3 answers (backbone/bankrec.py) as a pass.
 
 Set V3_SUB=<path to v3 csv(.gz) for the same phase>. Two entry points:
   run(ctx)          : v3 lines WITH items, for lines not yet claimed by an earlier (higher-precision) pass.

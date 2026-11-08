@@ -1,7 +1,7 @@
 """Bank reconciliation v1 — cascade of deterministic matchers.
 
-    python solution/bankrec.py --phase sample --out sub_sample_v1.csv.gz
-    python solution/bankrec.py --phase live   --out sub_live_v1.csv.gz
+    python backbone/bankrec.py --phase sample --out sub_sample_v1.csv.gz
+    python backbone/bankrec.py --phase live   --out sub_live_v1.csv.gz
 
 Passes (each bank line is resolved by the first pass that claims it):
   1. batch files: SEPA direct-debit batches, card settlements, cheque deposits, payment runs (transfers / confirming)
@@ -191,7 +191,7 @@ def load_items(root, phase):
             it.open = it.total
     else:
         prev = {"live": "train", "final": "live"}[phase]
-        cache = os.path.join(root, "solution", "cache", f"open_start_{phase}_v2.pkl")
+        cache = os.path.join(root, "_cache", "backbone", f"open_start_{phase}_v2.pkl")
         oi = {r["item_id"]: r for r in rcsv(os.path.join(root, phase, "open_items_at_start.csv.gz"))}
         if os.path.exists(cache):
             with open(cache, "rb") as fh:
@@ -251,7 +251,7 @@ def load_items_dev(root, add_files, items):
     """Open items at the start of the held-out window, rebuilt from the TRAIN golden; plus items issued in the window.
     Items fully settled in the 120 days before the window are kept with open=0 (for duplicate detection)."""
     start, end = dev_bounds()
-    cache = os.path.join(root, "solution", "cache", f"dev_items_{DEV_MONTHS[0]}_{DEV_MONTHS[-1]}.pkl")
+    cache = os.path.join(root, "_cache", "backbone", f"dev_items_{DEV_MONTHS[0]}_{DEV_MONTHS[-1]}.pkl")
     if os.path.exists(cache):
         with open(cache, "rb") as fh:
             items.update(pickle.load(fh))
@@ -1670,7 +1670,7 @@ class CatModel:
 def main():
     global DEV_MONTHS
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    ap.add_argument("--data", default=os.environ.get("BANKREC_DATA", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")))
     ap.add_argument("--phase", default="sample", choices=["sample", "dev", "train", "live", "final"])
     ap.add_argument("--months", default=",".join(DEV_MONTHS), help="held-out TRAIN months for --phase dev (YYYYMM,...)")
     ap.add_argument("--out", default=None)
@@ -1682,7 +1682,7 @@ def main():
 
     model = CatModel()
     excl = DEV_MONTHS if a.phase == "dev" else []
-    mp = os.path.join(root, "solution", "cache", "catmodel%s.json" % ("_excl_" + "_".join(excl) if excl else ""))
+    mp = os.path.join(root, "_cache", "backbone", "catmodel%s.json" % ("_excl_" + "_".join(excl) if excl else ""))
     if os.path.exists(mp):
         model.load(mp)
     else:

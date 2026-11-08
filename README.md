@@ -10,37 +10,20 @@
 [![PyMuPDF](https://img.shields.io/badge/PDF-PyMuPDF%20%2B%20poppler-555)](https://pymupdf.readthedocs.io/)
 [![FINAL score](https://img.shields.io/badge/FINAL%20(blind)-95.06-c0392b)](#results)
 [![LIVE score](https://img.shields.io/badge/LIVE-94.67-555)](docs/RESULTS.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Built at](https://img.shields.io/badge/built%20at-Talky%20%C3%97%20Anthropic%20hackathon-black)](#team)
 
 </div>
 
 ## Demo
 
-<!--
-  Native GitHub player: edit this README on github.com, drag docs/assets/demo.mp4 (8.5 MB) into the editor on the line
-  below, and GitHub replaces it with a https://github.com/user-attachments/assets/<id> URL that renders as a player.
--->
-
-<!-- VIDEO_EMBED_URL -->
-
 <p align="center">
   <a href="https://github.com/jorgecarnicero/talky-x-claude/raw/main/docs/assets/demo.mp4">
-    <img src="docs/assets/demo-thumbnail.png" alt="Saturn Return: 45-second presentation video (click to play)" width="720">
+    <img src="docs/assets/demo-loop.gif" alt="Saturn Return presentation film: 203,083 unexplained bank lines fall to zero, 94.67 on LIVE, 95.06 on the blind FINAL" width="800">
   </a>
   <br>
-  <sub>45-second presentation film. Click the image to play it.</sub>
+  <sub>▶ <a href="https://github.com/jorgecarnicero/talky-x-claude/raw/main/docs/assets/demo.mp4"><b>Watch the full film with sound</b></a> (MP4, 1280×720)</sub>
 </p>
-
-<table>
-  <tr>
-    <td><img src="docs/assets/still-names.png" alt="A bank line whose payer name is truncated by the bank"></td>
-    <td><img src="docs/assets/still-pdfs.png" alt="A single payment explained by the clauses of a remittance-advice PDF"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Bank text truncates payer names, so identity comes from IBANs, aliases and history.</sub></td>
-    <td align="center"><sub>Instalments and withholdings live inside document PDFs, so they are parsed too.</sub></td>
-  </tr>
-</table>
 
 ## Overview
 
@@ -206,9 +189,10 @@ receipts left `UNIDENTIFIED`.
 │   ├── RESULTS.md            score log for every submitted model
 │   ├── ANTI_OVERFIT.md       acceptance method and its sources (Spanish)
 │   ├── V35.md  V4.md  ROADMAP.md   design notes per stage
-│   └── assets/               video, thumbnail, stills
+│   └── assets/               demo film (MP4) and its looping preview (GIF)
 ├── submissions/              the FINAL file that was submitted
 ├── requirements.txt          pinned runtime dependencies
+├── LICENSE                   MIT
 └── pyproject.toml
 ```
 
@@ -265,11 +249,12 @@ row of [docs/RESULTS.md](docs/RESULTS.md).
 ## Team
 
 Built during the Talky × Anthropic bank-reconciliation hackathon (November 2026) by **Jorge Carnicero**
-([@jorgecarnicero](https://github.com/jorgecarnicero)), **Aryan Verma**, **Mateo** and **Alejandro**, with Claude as a
-pair programmer throughout.
+([@jorgecarnicero](https://github.com/jorgecarnicero)), **Aryan Verma** ([@aryanv175](https://github.com/aryanv175)),
+**Mateo** ([@automatizamateo](https://github.com/automatizamateo)) and **Alejandro**
+([@alejandropastor03](https://github.com/alejandropastor03)), with Claude as a pair programmer throughout.
 
 All data is synthetic and belongs to the event organizers. It is not included in this repository.
 
 ## License
 
-No license has been chosen yet, so all rights are reserved by the authors.
+[MIT](LICENSE). The license covers the code in this repository, not the hackathon data.
